@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import SheetPreview from '@/components/SheetPreview';
 import { Icon, Spinner } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
-import { getPaper, getProduct, getShape, getTemplate, PAPERS, PRODUCTS, shapesForProduct, templatesFor } from '@/lib/catalog';
+import { getPaper, getProduct, getShape, getTemplate, PAPERS, PRODUCTS, shapesForProduct, cutText, sizeText, templatesFor, type Template } from '@/lib/catalog';
 import { computeLayout } from '@/lib/layout';
 import type { PublicEvent } from '@/lib/server/events';
 
@@ -28,11 +28,16 @@ const Label = ({ n, children, htmlFor }: { n: number; children: React.ReactNode;
   </label>
 );
 
+// A new event starts on the first product, its first shape (Round) and that shape's first size.
+const DEFAULT_PRODUCT = PRODUCTS[0].id;
+const DEFAULT_SHAPE = shapesForProduct(DEFAULT_PRODUCT)[0].id;
+const DEFAULT_TEMPLATE = templatesFor(DEFAULT_PRODUCT, DEFAULT_SHAPE)[0].id;
+
 export default function SetupForm({ event, onSaved, onCancel }: { event: PublicEvent; onSaved: (e: PublicEvent) => void; onCancel?: () => void }) {
   const first = event.setup;
-  const [productId, setProductId] = useState(first?.productId ?? 'magnet');
-  const [shapeId, setShapeId] = useState(first?.shapeId ?? 'rect-landscape');
-  const [templateId, setTemplateId] = useState(first?.templateId ?? templatesFor('magnet', 'rect-landscape')[0].id);
+  const [productId, setProductId] = useState(first?.productId ?? DEFAULT_PRODUCT);
+  const [shapeId, setShapeId] = useState(first?.shapeId ?? DEFAULT_SHAPE);
+  const [templateId, setTemplateId] = useState(first?.templateId ?? DEFAULT_TEMPLATE);
   const [paperId, setPaperId] = useState(first?.paperId ?? 'a4');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +49,7 @@ export default function SetupForm({ event, onSaved, onCancel }: { event: PublicE
   const shape = getShape(shapeId)!;
 
   const layout = useMemo(() => computeLayout(paper, 'portrait', template), [paper, template]);
-  const yieldFor = (t: { wmm: number; hmm: number }) => computeLayout(paper, 'portrait', t).count;
+  const yieldFor = (t: Template) => computeLayout(paper, 'portrait', t).count;
   const fits = layout.count > 0;
 
   const pickProduct = (id: string) => {
@@ -131,7 +136,11 @@ export default function SetupForm({ event, onSaved, onCancel }: { event: PublicE
               <p className="text-label-lg text-navy">
                 {fits ? `${layout.count} ${layout.count === 1 ? 'photo fits' : 'photos fit'} on ${paper.label.split(' ')[0]}` : 'This size does not fit on the chosen paper'}
               </p>
-              <p className="text-body-md text-secondary">{fits ? '10 mm printer-safe margin · 4 mm die-cut gap' : 'Choose a larger paper or a smaller template.'}</p>
+              <p className="text-body-md text-secondary">{fits
+                  ? template.cutW
+                    ? `Photo ${template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`} inside a ${cutText(template)} cut outline · ${template.gapMm} mm between pieces`
+                    : '10 mm printer-safe margin · 4 mm die-cut gap'
+                  : 'Choose a larger paper or a smaller template.'}</p>
             </div>
           </div>
         </div>
@@ -174,7 +183,7 @@ export default function SetupForm({ event, onSaved, onCancel }: { event: PublicE
           </p>
         </div>
         <p className="mt-space-md text-body-md text-secondary">
-          {getProduct(productId)?.label} · {shape.label.replace(/ \(.*\)/, '')} · {template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`}
+          {getProduct(productId)?.label} · {shape.label.replace(/ \(.*\)/, '')} · {sizeText(template)}
         </p>
       </aside>
     </div>

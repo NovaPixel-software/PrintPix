@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Icon } from '@/components/ui';
-import { getProduct } from '@/lib/catalog';
+import { getProduct, sizeText } from '@/lib/catalog';
 import { isConfigured, resolveSetup } from '@/lib/event';
 import type { PublicEvent } from '@/lib/server/events';
 import Editor from './Editor';
@@ -21,7 +21,7 @@ export default function EventWorkspace({ initial }: { initial: PublicEvent }) {
   const summary = isConfigured(event)
     ? (() => {
         const { template, layout } = resolveSetup(event.setup);
-        const size = template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`;
+        const size = sizeText(template);
         return `${getProduct(event.setup.productId)?.label} · ${size} · ${layout.count} per sheet`;
       })()
     : 'Setup not finished';

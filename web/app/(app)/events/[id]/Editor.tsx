@@ -3,12 +3,14 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Spinner } from '@/components/ui';
-import { getProduct } from '@/lib/catalog';
+import { getProduct, sizeText } from '@/lib/catalog';
 import { resolveSetup, type ConfiguredEvent } from '@/lib/event';
 import { ApiError, api } from '@/lib/api';
+import { DEFAULT_LABEL, ensureLabelFonts } from '@/lib/labels';
 import { clampPan, drawSheet, exportPng, hitSlot, importPhoto } from '@/lib/render';
 import type { PublicEvent } from '@/lib/server/events';
-import type { Photo, SlotData } from '@/lib/types';
+import type { NameLabel, Photo, SlotData } from '@/lib/types';
+import LabelPanel from './LabelPanel';
 
 const CANVAS_PX_PER_MM = 4.5;
 const norm = (d: number) => {
@@ -39,12 +41,22 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const pickTarget = useRef<number | null>(null);
   const drag = useRef<Drag | null>(null);
 
+  // Label fonts download on first use, so redraw once they are in, or the first names show in a fallback font.
+  const [fontsReady, setFontsReady] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void ensureLabelFonts().then(() => live && setFontsReady((n) => n + 1));
+    return () => {
+      live = false;
+    };
+  }, []);
+
   /* ---- draw ---- */
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
     drawSheet(c, layout, shape.clip, photos, CANVAS_PX_PER_MM, { selected });
-  }, [photos, selected, layout, shape]);
+  }, [photos, selected, layout, shape, fontsReady]);
 
   /* ---- photos are not saved, so warn before a refresh or close throws them away ---- */
   const hasPhotos = photos.some(Boolean);
@@ -83,7 +95,10 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     let failed = 0;
     for (const [n, file] of [...files].slice(0, targets.length).entries()) {
       try {
-        next[targets[n]] = await importPhoto(file);
+        const replaced = photos[targets[n]];
+        const fresh = await importPhoto(file);
+        if (replaced?.label) fresh.label = replaced.label; // replacing a photo keeps the name written on it
+        next[targets[n]] = fresh;
       } catch {
         failed++;
       }
@@ -159,6 +174,21 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     setBanner(null);
   };
 
+  /* ---- name labels ---- */
+  // Merges into the label as it is right now (not as it was at the last render), so quick clicks on design,
+  // colour and font in a row do not undo each other.
+  const setLabel = (change: Partial<NameLabel>) => {
+    const i = selected;
+    setPhotos((prev) => prev.map((p, idx) => (idx === i && p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), ...change } } : p)));
+  };
+
+  const sameDesignForAll = () => {
+    const from = sel?.label ?? DEFAULT_LABEL;
+    setPhotos((prev) =>
+      prev.map((p) => (p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), style: from.style, color: from.color, font: from.font, size: from.size } } : p)),
+    );
+  };
+
   const remove = () => {
     setPhotos((prev) => prev.map((p, i) => (i === selected ? null : p)));
   };
@@ -224,7 +254,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
                 <span className="truncate">Sheet editor</span>
               </p>
               <p className="truncate text-body-md text-white/70">
-                {getProduct(event.setup.productId)?.label} · {template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`} · {layout.count}-Up Matrix
+                {getProduct(event.setup.productId)?.label} · {sizeText(template)} · {layout.count}-Up Matrix
               </p>
             </div>
           </div>
@@ -364,6 +394,8 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               </div>
               {!sel && <p className="mt-3 text-body-md text-secondary">Tap an empty slot on the sheet to add a photo, then adjust it here.</p>}
             </Panel>
+
+            <LabelPanel label={sel?.label} hasPhoto={!!sel} slotNo={selected + 1} placedCount={photos.filter(Boolean).length} onChange={setLabel} onApplyToAll={sameDesignForAll} />
 
             <Panel>
               <p className="mb-3 text-label-md uppercase tracking-wider text-secondary">Automation &amp; Queue</p>

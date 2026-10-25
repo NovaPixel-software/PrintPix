@@ -2,9 +2,9 @@ import type { Paper, Template } from './catalog';
 
 export const DPI = 300;
 export const PX_PER_MM = DPI / 25.4;
-/** Safe margin around the sheet that the printer cannot reach. */
+/** Default safe margin around the sheet that the printer cannot reach. */
 export const MARGIN_MM = 10;
-/** Gap between slots, left for the die-cut. */
+/** Default gap between pieces, left for the die-cut. */
 export const GAP_MM = 4;
 
 export type Orientation = 'portrait' | 'landscape';
@@ -22,8 +22,11 @@ export interface SheetLayout {
   cols: number;
   rows: number;
   count: number;
-  slots: Rect[]; // mm, row by row
-  slotW: number;
+  /** The photo area of each piece, mm, row by row. */
+  slots: Rect[];
+  /** The outer cut outline of each piece, in the same order. Null when the template has no separate cut size. */
+  cuts: Rect[] | null;
+  slotW: number; // photo area
   slotH: number;
   pxW: number; // pixels at 300 DPI
   pxH: number;
@@ -33,20 +36,31 @@ export function pageSize(paper: Paper, orientation: Orientation) {
   return orientation === 'portrait' ? { w: paper.wmm, h: paper.hmm } : { w: paper.hmm, h: paper.wmm };
 }
 
-const fit = (avail: number, size: number) => Math.max(0, Math.floor((avail - 2 * MARGIN_MM + GAP_MM) / (size + GAP_MM)));
+type Spec = Pick<Template, 'wmm' | 'hmm'> & Partial<Pick<Template, 'cutW' | 'cutH' | 'gapMm' | 'marginMm'>>;
 
-export function computeLayout(paper: Paper, orientation: Orientation, template: Pick<Template, 'wmm' | 'hmm'>): SheetLayout {
+export function computeLayout(paper: Paper, orientation: Orientation, template: Spec): SheetLayout {
   const { w: pageW, h: pageH } = pageSize(paper, orientation);
-  const cols = fit(pageW, template.wmm);
-  const rows = fit(pageH, template.hmm);
-  const totalW = cols * template.wmm + Math.max(0, cols - 1) * GAP_MM;
-  const totalH = rows * template.hmm + Math.max(0, rows - 1) * GAP_MM;
+  const margin = template.marginMm ?? MARGIN_MM;
+  const gap = template.gapMm ?? GAP_MM;
+  // Pieces are packed by their outer size: the cut outline when there is one, otherwise the photo itself.
+  const cellW = template.cutW ?? template.wmm;
+  const cellH = template.cutH ?? template.hmm;
+  const fit = (avail: number, size: number) => Math.max(0, Math.floor((avail - 2 * margin + gap) / (size + gap) + 1e-9));
+  const cols = fit(pageW, cellW);
+  const rows = fit(pageH, cellH);
+  const totalW = cols * cellW + Math.max(0, cols - 1) * gap;
+  const totalH = rows * cellH + Math.max(0, rows - 1) * gap;
   const x0 = (pageW - totalW) / 2;
   const y0 = (pageH - totalH) / 2;
   const slots: Rect[] = [];
+  const cuts: Rect[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      slots.push({ x: x0 + c * (template.wmm + GAP_MM), y: y0 + r * (template.hmm + GAP_MM), w: template.wmm, h: template.hmm });
+      const x = x0 + c * (cellW + gap);
+      const y = y0 + r * (cellH + gap);
+      cuts.push({ x, y, w: cellW, h: cellH });
+      // the photo area sits in the middle of its cut outline
+      slots.push({ x: x + (cellW - template.wmm) / 2, y: y + (cellH - template.hmm) / 2, w: template.wmm, h: template.hmm });
     }
   }
   return {
@@ -56,6 +70,7 @@ export function computeLayout(paper: Paper, orientation: Orientation, template: 
     rows,
     count: cols * rows,
     slots,
+    cuts: template.cutW && template.cutH ? cuts : null,
     slotW: template.wmm,
     slotH: template.hmm,
     pxW: Math.round(pageW * PX_PER_MM),
@@ -64,6 +79,6 @@ export function computeLayout(paper: Paper, orientation: Orientation, template: 
 }
 
 /** How many slots fit if the template were turned 90 degrees, to say whether the chosen yield is the best one. */
-export function rotatedYield(paper: Paper, orientation: Orientation, template: Pick<Template, 'wmm' | 'hmm'>): number {
-  return computeLayout(paper, orientation, { wmm: template.hmm, hmm: template.wmm }).count;
+export function rotatedYield(paper: Paper, orientation: Orientation, template: Spec): number {
+  return computeLayout(paper, orientation, { ...template, wmm: template.hmm, hmm: template.wmm, cutW: template.cutH, cutH: template.cutW }).count;
 }

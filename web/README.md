@@ -70,7 +70,7 @@ Restarting the server resets accounts to this seed.
 | `/login` | Sign in (admins and users) |
 | `/events` | **My Events** (a user's main page): all their events as a **table** (default) or cards, with Downloads and Prints counts. New Event is in the top bar. Phones always get cards |
 | `/events/new` | New Event: just a name. Creating it opens the event |
-| `/events/[id]` | Everything for one event: Downloads and Prints counts at the top, a **Setup** tab (product, shape, template size, paper) and a **Photos** tab (editor: slots, zoom, turns, tilt, Reset Sheet, Download PNG, Print). A new event opens on Setup first |
+| `/events/[id]` | Everything for one event: Downloads and Prints counts at the top, a **Setup** tab (product, shape, template size, paper) and a **Photos** tab (editor: slots, zoom, turns, tilt, a name label per photo, Reset Sheet, Download PNG, Print). A new event opens on Setup first |
 | `/settings` | Account and change password |
 | `/admin` | Users: add, reset password, active/inactive |
 
@@ -87,6 +87,18 @@ Restarting the server resets accounts to this seed.
 | `GET /api/admin/users` | admin | List users |
 | `POST /api/admin/users` | admin | Add a user (`name`, `email`, `password`, optional `expiresAt`, default one year) |
 | `PATCH /api/admin/users/[id]` | admin | Any of `name`, `email`, `expiresAt` (`YYYY-MM-DD`), `status` (`active` / `inactive`), `password` |
+
+## Sheets, labels and print quality
+
+- **Cut outline templates.** Round (photo 59 mm inside a 68 mm cut line) and Square (photo 53.6 mm inside 64 mm) come from the two PSD
+  printing templates, 12 per A4. The Fridge Magnet rectangles get a 5.2 mm ring (the same space Square has) around the photo. The sheet
+  draws a thin cut line around each piece. In the Photo Shape list Round is first and Square second.
+- **Name labels.** Each photo can carry a name: a design (ribbon, bar, pill or text only), a colour, a font (script, fun, bold) and a size.
+  "Same design for all" copies the design to every photo and keeps each photo's own name. Labels are drawn on the canvas, so the
+  download and the print show exactly what the editor shows. Fonts load from Google Fonts through `next/font` (see `app/layout.tsx`).
+- **Print quality.** Photos are kept as imported (no JPEG re-encode) and only shrunk above 2400 px. When the sheet is exported, each photo is
+  reduced to its print size by exact area averaging, which gives far less grain than the browser's own smoothing. The PNG carries 300 dpi
+  (a pHYs chunk), so Photos, Word and print dialogs open and print the A4 sheet at its true size.
 
 ## Not built yet
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Icon } from '@/components/ui';
-import { getProduct } from '@/lib/catalog';
+import { getProduct, sizeText } from '@/lib/catalog';
 import { resolveSetup } from '@/lib/event';
 import { eventRepo } from '@/lib/server/events';
 import { requireUser } from '@/lib/server/session';
@@ -15,7 +15,7 @@ export default async function MyEventsPage() {
     const base = { id: e.id, name: e.name, created, downloads: e.downloads, prints: e.prints };
     if (!e.setup) return { ...base, product: null, size: null, perSheet: null };
     const { template, layout } = resolveSetup(e.setup);
-    const size = template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`;
+    const size = sizeText(template);
     return { ...base, product: getProduct(e.setup.productId)?.label ?? e.setup.productId, size, perSheet: layout.count };
   });
 
