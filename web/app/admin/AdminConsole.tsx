@@ -10,6 +10,9 @@ import { ApiError, api, type PublicUser } from '@/lib/api';
 type State = 'active' | 'inactive' | 'expired';
 type Tab = 'all' | State;
 
+const NO_STATS = { events: 0, downloads: 0, prints: 0 };
+const statsOf = (u: PublicUser) => u.stats ?? NO_STATS;
+
 /** What a user is right now. Expired wins over active/inactive, because they cannot sign in either way. */
 const stateOf = (u: PublicUser): State => (u.expired ? 'expired' : u.status);
 
@@ -54,6 +57,10 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
   const [toast, setToast] = useState<string | null>(null);
 
   const count = (s: State) => users.filter((u) => stateOf(u) === s).length;
+  const totals = users.reduce(
+    (t, u) => ({ events: t.events + statsOf(u).events, downloads: t.downloads + statsOf(u).downloads, prints: t.prints + statsOf(u).prints }),
+    { events: 0, downloads: 0, prints: 0 },
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -128,6 +135,13 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
           </button>
         </div>
 
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <TotalCard icon="group" label="Users" value={users.length} note={`${count('active')} active`} />
+          <TotalCard icon="event" label="Events" value={totals.events} note="created by all users" />
+          <TotalCard icon="download" label="Downloads" value={totals.downloads} note="sheets downloaded" />
+          <TotalCard icon="print" label="Prints" value={totals.prints} note="sheets printed" />
+        </div>
+
         <section className="rounded-2xl border border-surface-container-high bg-surface-container-lowest shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-container p-4">
             <div className="flex flex-wrap gap-1 rounded-xl bg-surface-container p-1">
@@ -182,6 +196,11 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
                       <dd className="text-navy">{ago(u.lastLogin)}</dd>
                     </div>
                   </dl>
+                  <div className="grid grid-cols-3 divide-x divide-surface-container rounded-lg border border-surface-container text-center">
+                    <MiniStat label="Events" value={statsOf(u).events} />
+                    <MiniStat label="Downloads" value={statsOf(u).downloads} />
+                    <MiniStat label="Prints" value={statsOf(u).prints} />
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <EditButton onClick={() => setDialog({ edit: u })} className="h-10" />
                     <StatusButton on={u.status === 'active'} busy={pending === u.id} onClick={() => setStatus(u, u.status === 'active' ? 'inactive' : 'active')} className="h-10" />
@@ -197,8 +216,8 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
             <table className="w-full text-left text-body-lg">
               <thead className="bg-surface-container-low text-label-md text-secondary">
                 <tr>
-                  {['User', 'Status', 'Created', 'Expires', 'Last login', 'Actions'].map((h, i) => (
-                    <th key={h} className={`whitespace-nowrap px-4 py-3 font-semibold ${i === 5 ? 'text-right' : ''}`}>
+                  {['User', 'Status', 'Created', 'Expires', 'Events', 'Downloads', 'Prints', 'Last login', 'Actions'].map((h, i) => (
+                    <th key={h} className={`whitespace-nowrap px-4 py-3 font-semibold ${i >= 4 && i <= 6 ? 'text-right' : ''} ${i === 8 ? 'text-right' : ''}`}>
                       {h}
                     </th>
                   ))}
@@ -225,6 +244,9 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
                       <td className="whitespace-nowrap px-4 py-3">
                         <Expiry u={u} />
                       </td>
+                      <td className="px-4 py-3 text-right font-semibold text-navy">{statsOf(u).events}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-navy">{statsOf(u).downloads}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-navy">{statsOf(u).prints}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-navy">{ago(u.lastLogin)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
@@ -237,7 +259,7 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-14 text-center text-secondary">
+                    <td colSpan={9} className="px-4 py-14 text-center text-secondary">
                       {users.length === 0 ? 'No users yet. Add the first one.' : 'No users match this view.'}
                     </td>
                   </tr>
@@ -276,6 +298,30 @@ export default function AdminConsole({ initialUsers, me }: { initialUsers: Publi
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-navy px-5 py-3 text-label-lg text-white shadow-xl">{toast}</div>}
+    </div>
+  );
+}
+
+function TotalCard({ icon, label, value, note }: { icon: string; label: string; value: number; note: string }) {
+  return (
+    <div className="rounded-2xl border border-surface-container-high bg-surface-container-lowest p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-label-md uppercase tracking-wider text-secondary">{label}</p>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-container text-tertiary">
+          <Icon name={icon} className="!text-[18px]" />
+        </span>
+      </div>
+      <p className="mt-2 text-[28px] font-bold leading-none text-navy">{value.toLocaleString('en-IN')}</p>
+      <p className="mt-1 text-body-sm text-secondary">{note}</p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="px-2 py-2">
+      <p className="text-label-lg text-navy">{value}</p>
+      <p className="text-body-sm text-secondary">{label}</p>
     </div>
   );
 }

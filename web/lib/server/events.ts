@@ -27,10 +27,21 @@ export interface EventRecord {
   createdAt: string;
 }
 
+/** What one user has done: how many events they made, and the downloads and prints across all of them. */
+export interface OwnerStats {
+  events: number;
+  downloads: number;
+  prints: number;
+}
+
+export const NO_STATS: OwnerStats = { events: 0, downloads: 0, prints: 0 };
+
 export interface EventRepo {
   create(input: { ownerId: string; name: string }): Promise<EventRecord>;
   get(id: string): Promise<EventRecord | null>;
   listByOwner(ownerId: string): Promise<EventRecord[]>;
+  /** Totals per owner id. Pass an id to total just that owner. Owners with no events are missing from the result. */
+  statsByOwner(ownerId?: string): Promise<Record<string, OwnerStats>>;
   setSetup(id: string, setup: EventSetup): Promise<EventRecord | null>;
   increment(id: string, kind: 'downloads' | 'prints'): Promise<EventRecord | null>;
 }
@@ -48,6 +59,17 @@ class MemoryEventRepo implements EventRepo {
   }
   async listByOwner(ownerId: string) {
     return this.events.filter((e) => e.ownerId === ownerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  async statsByOwner(ownerId?: string) {
+    const out: Record<string, OwnerStats> = {};
+    for (const e of this.events) {
+      if (ownerId && e.ownerId !== ownerId) continue;
+      const s = (out[e.ownerId] ??= { events: 0, downloads: 0, prints: 0 });
+      s.events += 1;
+      s.downloads += e.downloads;
+      s.prints += e.prints;
+    }
+    return out;
   }
   async setSetup(id: string, setup: EventSetup) {
     const event = this.events.find((e) => e.id === id);
@@ -81,6 +103,15 @@ class MongoEventRepo implements EventRepo {
   }
   async listByOwner(ownerId: string) {
     return (await (await this.col()).find({ ownerId }).sort({ createdAt: -1 }).toArray()).map(toRecord);
+  }
+  async statsByOwner(ownerId?: string) {
+    const rows = await (await this.col())
+      .aggregate<{ _id: string; events: number; downloads: number; prints: number }>([
+        ...(ownerId ? [{ $match: { ownerId } }] : []),
+        { $group: { _id: '$ownerId', events: { $sum: 1 }, downloads: { $sum: '$downloads' }, prints: { $sum: '$prints' } } },
+      ])
+      .toArray();
+    return Object.fromEntries(rows.map((r) => [r._id, { events: r.events, downloads: r.downloads, prints: r.prints }]));
   }
   async setSetup(id: string, setup: EventSetup) {
     const doc = await (await this.col()).findOneAndUpdate({ _id: id }, { $set: { setup } }, { returnDocument: 'after' });

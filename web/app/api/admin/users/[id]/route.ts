@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { publicUser, userRepo } from '@/lib/server/db';
+import { eventRepo, NO_STATS } from '@/lib/server/events';
 import { isIsoDate } from '@/lib/server/expiry';
 import { getSession } from '@/lib/server/session';
 
@@ -45,7 +46,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   try {
     const updated = await userRepo.update(id, patch);
-    return NextResponse.json({ user: updated ? publicUser(updated) : null });
+    const stats = (await eventRepo.statsByOwner(id))[id] ?? NO_STATS;
+    return NextResponse.json({ user: updated ? publicUser(updated, stats) : null });
   } catch (e) {
     // Two admins saving the same email at once: the database's unique index lets only one through.
     if ((e as { code?: number }).code === 11000) return NextResponse.json({ message: 'Another user already has this email.' }, { status: 409 });

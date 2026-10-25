@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { publicUser, userRepo } from '@/lib/server/db';
+import { eventRepo, NO_STATS } from '@/lib/server/events';
 import { addMonthsIso, isIsoDate, todayIso } from '@/lib/server/expiry';
 import { getSession } from '@/lib/server/session';
 
@@ -12,7 +13,8 @@ export async function GET() {
   const denied = await adminOnly();
   if (denied) return denied;
   const users = (await userRepo.list()).filter((u) => u.role === 'user');
-  return NextResponse.json({ users: users.map(publicUser) });
+  const stats = await eventRepo.statsByOwner();
+  return NextResponse.json({ users: users.map((u) => publicUser(u, stats[u.id] ?? NO_STATS)) });
 }
 
 // Only an admin can create users, and they are always plain users (never admins).
@@ -34,5 +36,5 @@ export async function POST(req: Request) {
   if (await userRepo.getByEmail(email)) return NextResponse.json({ message: 'A user with this email already exists.' }, { status: 409 });
 
   const user = await userRepo.create({ name, email, password, role: 'user', status: 'active', expiresAt });
-  return NextResponse.json({ user: publicUser(user) }, { status: 201 });
+  return NextResponse.json({ user: publicUser(user, NO_STATS) }, { status: 201 });
 }

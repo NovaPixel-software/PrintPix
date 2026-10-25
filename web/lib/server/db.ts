@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Collection } from 'mongodb';
+import type { OwnerStats } from './events';
 import { addMonthsIso, daysLeft, isExpired, todayIso } from './expiry';
 import { getDb, mongoEnabled } from './mongo';
 
@@ -190,9 +191,10 @@ class MongoUserRepo implements UserRepo {
 const g = globalThis as unknown as { __printpixUsersV3?: UserRepo };
 export const userRepo: UserRepo = (g.__printpixUsersV3 ??= mongoEnabled() ? new MongoUserRepo() : new MemoryUserRepo());
 
-export function publicUser(u: UserRecord) {
+/** What the browser may see. The admin Users page passes each user's event totals in `stats`. */
+export function publicUser(u: UserRecord, stats?: OwnerStats) {
   const { passwordHash: _omit, ...rest } = u;
-  return { ...rest, expired: isExpired(u), daysLeft: u.role === 'user' ? daysLeft(u.expiresAt) : null };
+  return { ...rest, expired: isExpired(u), daysLeft: u.role === 'user' ? daysLeft(u.expiresAt) : null, stats: stats ?? null };
 }
 
 export type PublicUser = ReturnType<typeof publicUser>;
