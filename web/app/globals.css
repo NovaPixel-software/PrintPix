@@ -93,3 +93,12 @@ input[type='range'].slider:disabled {
     object-fit: contain;
   }
 }
+
+/* The photo editor on a large screen fits the window: the page stays put and its two columns scroll on their own. */
+@media (min-width: 1024px) {
+  html.editor-lock,
+  html.editor-lock body {
+    height: 100vh;
+    overflow: hidden;
+  }
+}

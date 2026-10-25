@@ -138,7 +138,7 @@ export default function SetupForm({ event, onSaved, onCancel }: { event: PublicE
               </p>
               <p className="text-body-md text-secondary">{fits
                   ? template.cutW
-                    ? `Photo ${template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`} inside a ${cutText(template)} cut outline · ${template.gapMm} mm between pieces`
+                    ? `Photo ${template.wmm === template.hmm ? `${template.wmm} mm` : `${template.wmm}×${template.hmm} mm`} inside a ${cutText(template)} cut outline · ${template.gapXmm} mm across, ${template.gapYmm} mm down between pieces`
                     : '10 mm printer-safe margin · 4 mm die-cut gap'
                   : 'Choose a larger paper or a smaller template.'}</p>
             </div>

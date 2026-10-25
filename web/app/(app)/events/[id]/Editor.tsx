@@ -3,10 +3,9 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Spinner } from '@/components/ui';
-import { getProduct, sizeText } from '@/lib/catalog';
 import { resolveSetup, type ConfiguredEvent } from '@/lib/event';
 import { ApiError, api } from '@/lib/api';
-import { DEFAULT_LABEL, ensureLabelFonts } from '@/lib/labels';
+import { DEFAULT_LABEL, ensureLabelFonts, preloadFrames } from '@/lib/labels';
 import { clampPan, drawSheet, exportPng, hitSlot, importPhoto } from '@/lib/render';
 import type { PublicEvent } from '@/lib/server/events';
 import type { NameLabel, Photo, SlotData } from '@/lib/types';
@@ -28,7 +27,7 @@ interface Drag {
 }
 
 export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onEvent: (e: PublicEvent) => void }) {
-  const { layout, shape, template } = useMemo(() => resolveSetup(event.setup), [event.setup]);
+  const { layout, shape } = useMemo(() => resolveSetup(event.setup), [event.setup]);
 
   // Photos live in memory only. They are never saved or uploaded, and a refresh clears them.
   const [photos, setPhotos] = useState<(Photo | null)[]>(() => Array(layout.count).fill(null));
@@ -37,6 +36,9 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const [banner, setBanner] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // On a large screen each column is as tall as the space left under the headers, and scrolls inside that.
+  const [colMax, setColMax] = useState<number | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const pickTarget = useRef<number | null>(null);
   const drag = useRef<Drag | null>(null);
@@ -57,6 +59,33 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     if (!c) return;
     drawSheet(c, layout, shape.clip, photos, CANVAS_PX_PER_MM, { selected });
   }, [photos, selected, layout, shape, fontsReady]);
+
+  // Overlay designs are images, so redraw once the ones in use have arrived.
+  const frameIds = photos.map((p) => p?.label?.frame).join(',');
+  useEffect(() => {
+    let live = true;
+    void preloadFrames(frameIds.split(',')).then((fresh) => live && fresh && setFontsReady((n) => n + 1));
+    return () => {
+      live = false;
+    };
+  }, [frameIds]);
+
+  useEffect(() => {
+    const fit = () => {
+      const g = gridRef.current;
+      if (!g || innerWidth < 1024 || !g.offsetParent) return setColMax(undefined);
+      setColMax(Math.max(320, innerHeight - g.getBoundingClientRect().top - 16));
+    };
+    fit();
+    addEventListener('resize', fit);
+    // the editor is hidden while the Setup tab is open, so measure again when it comes back
+    const ro = new ResizeObserver(fit);
+    if (gridRef.current) ro.observe(gridRef.current);
+    return () => {
+      removeEventListener('resize', fit);
+      ro.disconnect();
+    };
+  }, [banner]);
 
   /* ---- photos are not saved, so warn before a refresh or close throws them away ---- */
   const hasPhotos = photos.some(Boolean);
@@ -80,6 +109,37 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     },
     [layout],
   );
+
+  /** Zoom one photo by a step, keeping it covering its frame. */
+  const zoomBy = useCallback(
+    (i: number, d: number) => {
+      setPhotos((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== i || !p) return p;
+          const next = { ...p, zoom: Math.min(3, Math.max(1, p.zoom + d)) };
+          const s = layout.slots[i];
+          return { ...next, ...clampPan(next, s.w, s.h) };
+        }),
+      );
+    },
+    [layout],
+  );
+
+  /* ---- mouse wheel over a photo zooms it (needs a non-passive listener to stop the page from scrolling) ---- */
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const onWheel = (e: WheelEvent) => {
+      const r = c.getBoundingClientRect();
+      const i = hitSlot(layout, shape.clip, ((e.clientX - r.left) / r.width) * layout.pageW, ((e.clientY - r.top) / r.height) * layout.pageH);
+      if (i < 0 || !photos[i]) return;
+      e.preventDefault();
+      setSelected(i);
+      zoomBy(i, e.deltaY < 0 ? 0.1 : -0.1);
+    };
+    c.addEventListener('wheel', onWheel, { passive: false });
+    return () => c.removeEventListener('wheel', onWheel);
+  }, [layout, shape, photos, zoomBy]);
 
   /* ---- adding photos ---- */
   const addFiles = async (files: FileList | null, first: number | null) => {
@@ -185,7 +245,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const sameDesignForAll = () => {
     const from = sel?.label ?? DEFAULT_LABEL;
     setPhotos((prev) =>
-      prev.map((p) => (p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), style: from.style, color: from.color, font: from.font, size: from.size } } : p)),
+      prev.map((p) => (p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), color: from.color, frame: from.frame, ribbon: from.ribbon, ribbonColor: from.ribbonColor, font: from.font, size: from.size, bold: from.bold, italic: from.italic, stroke: from.stroke, strokeColor: from.strokeColor } } : p)),
     );
   };
 
@@ -247,33 +307,15 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-navy p-4 text-white shadow-lg">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="min-w-0">
-              <p className="flex flex-wrap items-center gap-2 text-label-lg">
-                <span className="truncate">Sheet editor</span>
-              </p>
-              <p className="truncate text-body-md text-white/70">
-                {getProduct(event.setup.productId)?.label} · {sizeText(template)} · {layout.count}-Up Matrix
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-label-md">
-              <Icon name="grid_view" className="!text-[16px] text-tertiary-container" /> {placed} / {layout.count} Photos Placed
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-space-md lg:grid lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div ref={gridRef} className="flex flex-col gap-space-md lg:grid lg:grid-cols-[minmax(0,1fr)_380px]">
           {/* stage */}
-          <section className="sticky top-[102px] z-20 overflow-hidden rounded-2xl bg-gradient-to-br from-navy via-[#10264a] to-[#2a1a22] p-2 shadow-lg sm:p-5 md:top-[66px] lg:static lg:self-start">
+          <section className="sticky top-[102px] z-20 overflow-hidden rounded-2xl bg-gradient-to-br from-navy via-[#10264a] to-[#2a1a22] p-2 shadow-lg sm:p-5 md:top-[66px] lg:self-start lg:overflow-y-auto lg:overscroll-contain" style={{ maxHeight: colMax }}>
             <div className="mb-3 hidden flex-wrap items-center justify-between gap-2 text-label-md uppercase tracking-wider text-white/80 lg:flex">
               <span className="flex items-center gap-2">
                 <Icon name="crop_free" className="!text-[16px]" /> {layout.pageW > layout.pageH ? 'Landscape' : 'Portrait'} grid ({layout.pageW} × {layout.pageH} mm)
               </span>
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-tertiary-container" /> Scale: 1:1 true spec
+              <span className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 normal-case tracking-normal">
+                <Icon name="grid_view" className="!text-[16px] text-tertiary-container" /> {placed} / {layout.count} photos placed
               </span>
             </div>
             <div className="relative mx-auto" style={{ maxWidth: layout.pageW > layout.pageH ? 760 : 540 }}>
@@ -298,8 +340,24 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-3 lg:mt-4">
               <span className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-label-md text-white sm:flex">
-                <Icon name="pan_tool" className="!text-[16px]" /> Drag photo in frame to reposition
+                <Icon name="pan_tool" className="!text-[16px]" /> Drag to move · scroll to zoom
               </span>
+              <span className="flex items-center gap-1 rounded-full border border-white/15 bg-white/5 p-1 text-white">
+                <button disabled={!sel} onClick={() => zoomBy(selected, -0.1)} aria-label="Zoom out" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40">
+                  <Icon name="zoom_out" className="!text-[18px]" />
+                </button>
+                <span className="w-10 text-center text-label-md">{zoomPct}%</span>
+                <button disabled={!sel} onClick={() => zoomBy(selected, 0.1)} aria-label="Zoom in" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40">
+                  <Icon name="zoom_in" className="!text-[18px]" />
+                </button>
+              </span>
+              <button
+                disabled={!sel}
+                onClick={() => patch(selected, { ox: 0, oy: 0 })}
+                className="flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-label-md text-white hover:bg-white/10 disabled:opacity-40 sm:px-4 sm:py-2"
+              >
+                <Icon name="center_focus_strong" className="!text-[16px]" /> Center
+              </button>
               <button
                 disabled={!sel}
                 onClick={() => patch(selected, { zoom: 1, rot: 0, tilt: 0, ox: 0, oy: 0 })}
@@ -311,7 +369,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
           </section>
 
           {/* controls */}
-          <aside className="space-y-space-md">
+          <aside className="space-y-space-md lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1" style={{ maxHeight: colMax }}>
             <Panel>
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-label-lg text-navy">Target Slot</p>

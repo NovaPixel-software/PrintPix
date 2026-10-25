@@ -1,11 +1,19 @@
 'use client';
 
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '@/components/ui';
-import { DEFAULT_LABEL, LABEL_COLORS, LABEL_FONTS, LABEL_STYLES, MAX_LABEL_CHARS } from '@/lib/labels';
-import type { NameLabel } from '@/lib/types';
+import { FRAMES, getFrame } from '@/lib/frames';
+import { DEFAULT_LABEL, LABEL_COLORS, LABEL_FONTS, MAX_LABEL_CHARS, RIBBON_STYLES } from '@/lib/labels';
+import type { NameLabel, RibbonStyle } from '@/lib/types';
 
 const input =
   'h-10 w-full rounded-lg border border-surface-container-high bg-surface-container-low px-3 text-body-lg outline-none focus:border-tertiary-container focus:ring-[3px] focus:ring-tertiary-container/20';
+
+const colourOptions = LABEL_COLORS.map((o) => ({
+  value: o.value,
+  label: o.name,
+  lead: <span className={`h-4 w-4 rounded-full border ${o.value === '#ffffff' ? 'border-outline-variant' : 'border-transparent'}`} style={{ backgroundColor: o.value }} />,
+}));
 
 /** Name label for the selected photo: the name, its design, colour, font and size. */
 export default function LabelPanel({
@@ -47,58 +55,91 @@ export default function LabelPanel({
             <input className={input} value={l.text} maxLength={MAX_LABEL_CHARS} onChange={(e) => onChange({ text: e.target.value })} placeholder="e.g. Johnathan" />
           </label>
 
-          <fieldset>
-            <legend className="mb-1.5 text-label-lg text-navy">Design</legend>
-            <div className="grid grid-cols-4 gap-2">
-              {LABEL_STYLES.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onChange({ style: s.id })}
-                  aria-pressed={l.style === s.id}
-                  className={`flex h-14 flex-col items-center justify-center gap-0.5 rounded-lg text-label-md transition ${l.style === s.id ? active : idle}`}
-                >
-                  <Icon name={s.icon} className="!text-[18px]" /> {s.label}
-                </button>
-              ))}
-            </div>
-          </fieldset>
+          <Dropdown
+            label="Design"
+            value={l.frame ?? 'none'}
+            options={[
+              { value: 'none', label: 'No design', lead: <Icon name="block" className="!text-[18px]" /> },
+              ...FRAMES.map((o) => ({
+                value: o.id,
+                label: o.label,
+                // eslint-disable-next-line @next/next/no-img-element
+                lead: <img src={o.src} alt="" className="h-6 w-6 rounded-full bg-surface-container" />,
+              })),
+            ]}
+            onChange={(v) => {
+              const def = getFrame(v);
+              onChange(def ? { frame: v, color: def.ink, ribbonColor: def.ribbon } : { frame: undefined });
+            }}
+          />
 
-          <fieldset>
-            <legend className="mb-1.5 text-label-lg text-navy">Colour</legend>
-            <div className="flex flex-wrap gap-2">
-              {LABEL_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  title={c.name}
-                  aria-label={c.name}
-                  aria-pressed={l.color === c.value}
-                  onClick={() => onChange({ color: c.value })}
-                  style={{ backgroundColor: c.value }}
-                  className={`h-8 w-8 rounded-full border transition ${c.value === '#ffffff' ? 'border-outline-variant' : 'border-transparent'} ${l.color === c.value ? 'ring-[3px] ring-primary-container ring-offset-2' : 'hover:scale-110'}`}
-                />
-              ))}
-            </div>
-          </fieldset>
+          <div className="grid grid-cols-2 gap-3">
+            <Dropdown
+              label="Label style"
+              value={l.ribbon ?? 'classic'}
+              options={RIBBON_STYLES.map((o) => ({ value: o.id as string, label: o.label, lead: <Icon name={o.icon} className="!text-[18px]" /> }))}
+              onChange={(v) => onChange({ ribbon: v as RibbonStyle })}
+            />
+            <Dropdown label="Ribbon colour" value={l.ribbonColor ?? '#e8467c'} options={colourOptions} onChange={(ribbonColor) => onChange({ ribbonColor })} />
+          </div>
 
-          <fieldset>
-            <legend className="mb-1.5 text-label-lg text-navy">Font</legend>
-            <div className="grid grid-cols-3 gap-2">
-              {LABEL_FONTS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => onChange({ font: f.id })}
-                  aria-pressed={l.font === f.id}
-                  style={{ fontFamily: `var(${f.cssVar})`, fontWeight: f.weight }}
-                  className={`h-11 rounded-lg text-[17px] transition ${l.font === f.id ? active : idle}`}
-                >
-                  {f.label}
-                </button>
-              ))}
+          <div className="grid grid-cols-1 gap-3">
+            <Dropdown
+              label="Text colour"
+              value={l.color}
+              options={colourOptions}
+              onChange={(color) => onChange({ color })}
+            />
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+            <Dropdown
+              label="Font"
+              value={l.font}
+              options={LABEL_FONTS.map((f) => ({
+                value: f.id,
+                label: f.label,
+                lead: (
+                  <span className="w-7 text-center text-[17px] leading-none" style={{ fontFamily: `var(${f.cssVar})`, fontWeight: f.heavy }}>
+                    Aa
+                  </span>
+                ),
+              }))}
+              onChange={(font) => onChange({ font })}
+            />
+            <div className="flex gap-1.5" role="group" aria-label="Text style">
+              <button
+                type="button"
+                aria-pressed={l.bold !== false}
+                aria-label="Bold"
+                title="Bold"
+                onClick={() => onChange({ bold: l.bold === false })}
+                className={`h-10 w-10 rounded-lg text-[17px] font-extrabold transition ${l.bold !== false ? active : idle}`}
+              >
+                B
+              </button>
+              <button
+                type="button"
+                aria-pressed={!!l.italic}
+                aria-label="Italic"
+                title="Italic"
+                onClick={() => onChange({ italic: !l.italic })}
+                className={`h-10 w-10 rounded-lg font-serif text-[17px] font-bold italic transition ${l.italic ? active : idle}`}
+              >
+                I
+              </button>
             </div>
-          </fieldset>
+          </div>
+
+          <div className="grid grid-cols-2 items-end gap-3">
+            <label className="block">
+              <span className="mb-1.5 flex items-center justify-between text-label-lg text-navy">
+                Outline <span className="text-primary-container">{Math.round((l.stroke ?? 0) * 100)}%</span>
+              </span>
+              <input type="range" className="slider h-10 w-full" min={0} max={100} step={5} value={Math.round((l.stroke ?? 0) * 100)} onChange={(e) => onChange({ stroke: Number(e.target.value) / 100 })} aria-label="Outline thickness" />
+            </label>
+            <Dropdown label="Outline colour" value={l.strokeColor ?? '#ffffff'} options={colourOptions} onChange={(strokeColor) => onChange({ strokeColor })} />
+          </div>
 
           <label className="block">
             <span className="mb-1 flex items-center justify-between text-label-lg text-navy">
@@ -127,6 +168,71 @@ export default function LabelPanel({
           </div>
           <p className="text-body-sm text-secondary">Each photo has its own name. &ldquo;Same design for all&rdquo; copies the design, colour, font and size, and keeps each photo&rsquo;s own name.</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** A dropdown whose options can carry a small picture (an icon or a colour dot), which a plain select cannot show. */
+function Dropdown<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string; lead: ReactNode }[];
+  onChange: (v: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const current = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', away);
+    addEventListener('keydown', esc);
+    return () => {
+      removeEventListener('pointerdown', away);
+      removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative">
+      <span className="mb-1.5 block text-label-lg text-navy">{label}</span>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-10 w-full items-center gap-2 rounded-lg border border-surface-container-high bg-surface-container-low px-3 text-body-lg text-navy outline-none focus:border-tertiary-container focus:ring-[3px] focus:ring-tertiary-container/20"
+      >
+        {current.lead}
+        <span className="flex-1 truncate text-left">{current.label}</span>
+        <Icon name="expand_more" className={`!text-[20px] text-secondary transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul role="listbox" className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-surface-container-high bg-surface-container-lowest p-1 shadow-xl">
+          {options.map((o) => (
+            <li key={o.value} role="option" aria-selected={o.value === value}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-body-md ${o.value === value ? 'bg-primary-container text-white' : 'text-navy hover:bg-surface-container'}`}
+              >
+                {o.lead}
+                <span className="truncate">{o.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -28,8 +28,13 @@ export interface Template {
    */
   cutW?: number;
   cutH?: number;
-  /** Optional spacing overrides in mm. Defaults are a 10 mm printer-safe margin and a 4 mm gap. */
-  gapMm?: number;
+  /**
+   * Optional spacing overrides in mm. Defaults are a 10 mm printer-safe margin and a 4 mm gap.
+   * gapXmm is between pieces across, gapYmm between rows, topMm the space above the first row.
+   */
+  gapXmm?: number;
+  gapYmm?: number;
+  topMm?: number;
   marginMm?: number;
 }
 
@@ -72,15 +77,18 @@ function t(productId: string, shapeId: string, wmm: number, hmm = wmm): Template
  * The sizes come from the vector data and the pixels in the PSDs, not from the layer boxes (those include the
  * anti-aliased edge and the line width, which made them 0.3 to 0.5 mm too big). Cut sizes are the centre of the cut line.
  */
-const ROUND_CUT_ID = 'magnet-round-photo59-cut68';
-const SQUARE_CUT_ID = 'magnet-square-photo53.6-cut64';
+const ROUND_CUT_ID = 'magnet-round-photo60.3-outer68.3';
+const SQUARE_CUT_ID = 'magnet-square-photo54.1-cut64.4';
 /** Space between the photo edge and the cut outline, on every side, in mm. Measured from the two PSD files. */
-const RING_ROUND_MM = 4.5; // (68 - 59) / 2
-const RING_SQUARE_MM = 5.2; // (64 - 53.6) / 2, also used for the magnet rectangles
+const RING_ROUND_MM = 4; // Photoshop: outer circle 538 px (68.3 mm), inner circle 475 px (60.3 mm), so (68.3 - 60.3) / 2
+const RING_SQUARE_MM = 5.15; // Photoshop: outer 507 px (64.4 mm), inner 426 px (54.1 mm), so (64.4 - 54.1) / 2; also used for the magnet rectangles
+/** Spacing between pieces, from the PSD layer positions (200 ppi). Round pieces nearly touch across; Square has wider gaps. */
+const SPACE_ROUND = { gapX: 0.44, gapY: 2.67, top: 3.7, margin: 1.5 };
+const SPACE_SQUARE = { gapX: 5.59, gapY: 4.53, top: 2.5, margin: 1.5 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function cutTemplate(id: string, shapeId: string, photoW: number, photoH: number, ringMm: number, gapMm: number, marginMm: number, label?: string): Template {
+function cutTemplate(id: string, shapeId: string, photoW: number, photoH: number, ringMm: number, space: { gapX: number; gapY: number; top: number; margin: number }, label?: string): Template {
   const cutW = round2(photoW + 2 * ringMm);
   const cutH = round2(photoH + 2 * ringMm);
   return {
@@ -91,26 +99,32 @@ function cutTemplate(id: string, shapeId: string, photoW: number, photoH: number
     hmm: photoH,
     cutW,
     cutH,
-    gapMm,
-    marginMm,
+    gapXmm: space.gapX,
+    gapYmm: space.gapY,
+    topMm: space.top,
+    marginMm: space.margin,
     label: label ?? `${dim(photoW, photoH)} · cut ${cutW}×${cutH} mm`,
   };
 }
 
 /** A magnet rectangle: same sizes and ids as before, now with a cut outline around it. */
-const magnetRect = (shapeId: string, w: number, h: number) => cutTemplate(`magnet-${shapeId}-${w}x${h}`, shapeId, w, h, RING_SQUARE_MM, 2, 4);
+const magnetRect = (shapeId: string, w: number, h: number) => cutTemplate(`magnet-${shapeId}-${w}x${h}`, shapeId, w, h, RING_SQUARE_MM, SPACE_SQUARE);
 
 /** Events saved before these templates existed point at the old ids, which now map to the new ones. */
 const LEGACY_TEMPLATE_IDS: Record<string, string> = {
+  'magnet-square-photo53.6-cut64': SQUARE_CUT_ID,
+  'magnet-round-photo59-cut68': ROUND_CUT_ID,
+  'magnet-round-photo59-outer59.9': ROUND_CUT_ID,
+  'magnet-round-photo59.4-cut68.3': ROUND_CUT_ID,
   'magnet-round-58x58': ROUND_CUT_ID,
   'magnet-square-63.5x63.5': SQUARE_CUT_ID,
 };
 
 export const TEMPLATES: Template[] = [
   // Fridge magnets: round first, then square
-  cutTemplate(ROUND_CUT_ID, 'round', 59, 59, RING_ROUND_MM, 0.5, 1.5, '58 mm round · photo 59 mm · cut 68 mm'),
+  cutTemplate(ROUND_CUT_ID, 'round', 60.3, 60.3, RING_ROUND_MM, SPACE_ROUND, '58 mm round · inner 60.3 mm · outer 68.3 mm'),
   t('magnet', 'round', 50),
-  cutTemplate(SQUARE_CUT_ID, 'square', 53.6, 53.6, RING_SQUARE_MM, 4, 4, 'Square · photo 53.6 mm · cut 64 mm'),
+  cutTemplate(SQUARE_CUT_ID, 'square', 54.1, 54.1, RING_SQUARE_MM, SPACE_SQUARE, 'Square · photo 54.1 mm · cut 64.4 mm'),
   t('magnet', 'square', 50),
   magnetRect('rect-landscape', 80, 53),
   magnetRect('rect-landscape', 89, 51),

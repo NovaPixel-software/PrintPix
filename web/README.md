@@ -93,7 +93,7 @@ Restarting the server resets accounts to this seed.
 - **Cut outline templates.** Round (photo 59 mm inside a 68 mm cut line) and Square (photo 53.6 mm inside 64 mm) come from the two PSD
   printing templates, 12 per A4. The Fridge Magnet rectangles get a 5.2 mm ring (the same space Square has) around the photo. The sheet
   draws a thin cut line around each piece. In the Photo Shape list Round is first and Square second.
-- **Name labels.** Each photo can carry a name: a design (ribbon, bar, pill or text only), a colour, a font (script, fun, bold) and a size.
+- **Name labels.** Each photo can carry a name on a ribbon (classic, folded banner, wavy, curved sash, pill, or name only), with its own ribbon colour, text colour, font (seven to pick from), bold, italic, outline and size. The name follows the curve of its ribbon. An optional overlay design (hearts, stars, night sky, sky, dots, gold ring) goes over the photo. Overlays are 2000 px transparent PNGs in `public/frames/`, listed in `lib/frames.ts`, and are shrunk step by step to their printed size so thin lines stay clean.
   "Same design for all" copies the design to every photo and keeps each photo's own name. Labels are drawn on the canvas, so the
   download and the print show exactly what the editor shows. Fonts load from Google Fonts through `next/font` (see `app/layout.tsx`).
 - **Print quality.** Photos are kept as imported (no JPEG re-encode) and only shrunk above 2400 px. When the sheet is exported, each photo is

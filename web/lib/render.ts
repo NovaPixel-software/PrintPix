@@ -1,6 +1,6 @@
 import type { ClipKind } from './catalog';
 import { DPI, PX_PER_MM, type Rect, type SheetLayout } from './layout';
-import { drawLabel, ensureLabelFonts } from './labels';
+import { drawLabel, ensureLabelFonts, preloadFrames } from './labels';
 import type { Photo } from './types';
 
 const BRAND = '#ff5e00';
@@ -339,6 +339,7 @@ async function withDpi(blob: Blob, dpi: number): Promise<Blob> {
 /** Print-ready PNG at 300 DPI, with the 300 dpi written into the file. */
 export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[]): Promise<Blob> {
   await ensureLabelFonts(); // labels must be drawn in their real fonts, not a fallback
+  await preloadFrames(slots.map((p) => p?.label?.frame)); // and overlay designs must be in
   const c = canvasOf(layout.pxW, layout.pxH);
   drawSheet(c, layout, clip, slots, PX_PER_MM);
   return withDpi(await toBlob(c, 'image/png'), DPI);

@@ -36,28 +36,30 @@ export function pageSize(paper: Paper, orientation: Orientation) {
   return orientation === 'portrait' ? { w: paper.wmm, h: paper.hmm } : { w: paper.hmm, h: paper.wmm };
 }
 
-type Spec = Pick<Template, 'wmm' | 'hmm'> & Partial<Pick<Template, 'cutW' | 'cutH' | 'gapMm' | 'marginMm'>>;
+type Spec = Pick<Template, 'wmm' | 'hmm'> & Partial<Pick<Template, 'cutW' | 'cutH' | 'gapXmm' | 'gapYmm' | 'topMm' | 'marginMm'>>;
 
 export function computeLayout(paper: Paper, orientation: Orientation, template: Spec): SheetLayout {
   const { w: pageW, h: pageH } = pageSize(paper, orientation);
   const margin = template.marginMm ?? MARGIN_MM;
-  const gap = template.gapMm ?? GAP_MM;
+  const gapX = template.gapXmm ?? GAP_MM;
+  const gapY = template.gapYmm ?? GAP_MM;
   // Pieces are packed by their outer size: the cut outline when there is one, otherwise the photo itself.
   const cellW = template.cutW ?? template.wmm;
   const cellH = template.cutH ?? template.hmm;
-  const fit = (avail: number, size: number) => Math.max(0, Math.floor((avail - 2 * margin + gap) / (size + gap) + 1e-9));
-  const cols = fit(pageW, cellW);
-  const rows = fit(pageH, cellH);
-  const totalW = cols * cellW + Math.max(0, cols - 1) * gap;
-  const totalH = rows * cellH + Math.max(0, rows - 1) * gap;
+  const fit = (avail: number, size: number, gap: number) => Math.max(0, Math.floor((avail + gap) / (size + gap) + 1e-9));
+  const cols = fit(pageW - 2 * margin, cellW, gapX);
+  // with a fixed top margin the rows start there and only the bottom margin is shared out; otherwise they are centred
+  const rows = fit(template.topMm != null ? pageH - template.topMm - margin : pageH - 2 * margin, cellH, gapY);
+  const totalW = cols * cellW + Math.max(0, cols - 1) * gapX;
+  const totalH = rows * cellH + Math.max(0, rows - 1) * gapY;
   const x0 = (pageW - totalW) / 2;
-  const y0 = (pageH - totalH) / 2;
+  const y0 = template.topMm ?? (pageH - totalH) / 2;
   const slots: Rect[] = [];
   const cuts: Rect[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const x = x0 + c * (cellW + gap);
-      const y = y0 + r * (cellH + gap);
+      const x = x0 + c * (cellW + gapX);
+      const y = y0 + r * (cellH + gapY);
       cuts.push({ x, y, w: cellW, h: cellH });
       // the photo area sits in the middle of its cut outline
       slots.push({ x: x + (cellW - template.wmm) / 2, y: y + (cellH - template.hmm) / 2, w: template.wmm, h: template.hmm });
