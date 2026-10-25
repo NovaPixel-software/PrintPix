@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    @apply bg-surface text-on-surface antialiased;
+    font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  }
+  input::placeholder {
+    @apply text-outline/70;
+  }
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  -webkit-font-smoothing: antialiased;
+}
+.icon-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Range sliders used in the editor */
+input[type='range'].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: #334155;
+  outline: none;
+}
+input[type='range'].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #ff5e00;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(10, 25, 49, 0.35);
+  cursor: pointer;
+}
+input[type='range'].slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ff5e00;
+  border: 3px solid #fff;
+  cursor: pointer;
+}
+input[type='range'].slider.blue::-webkit-slider-thumb {
+  background: #009dd9;
+}
+input[type='range'].slider.blue::-moz-range-thumb {
+  background: #009dd9;
+}
+input[type='range'].slider:disabled {
+  opacity: 0.4;
+}
+
+/* Printing: only the sheet image is shown, at A4 with no margins. */
+#print-root {
+  display: none;
+}
+@media print {
+  @page {
+    margin: 0;
+  }
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+  #print-root {
+    display: block;
+  }
+  #print-root img {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+  }
+}
