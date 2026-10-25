@@ -1,13 +1,17 @@
 import { MongoClient, type Db } from 'mongodb';
 
 /*
- * One MongoDB connection for the whole server. Set MONGODB_URI (and optionally MONGODB_DB) in
- * .env.local to use it. Without MONGODB_URI the app keeps its data in memory instead.
+ * One MongoDB connection for the whole server. Set PRINTPIX_MONGODB_URI (or MONGODB_URI), and optionally
+ * MONGODB_DB, in .env.local to use it. Without a URI the app keeps its data in memory instead.
  *
  * Only users and events are stored here. Photos never reach the server.
  */
 
-export const mongoEnabled = () => Boolean(process.env.MONGODB_URI);
+// PRINTPIX_MONGODB_URI wins over MONGODB_URI. Vercel's MongoDB integration injects its own locked
+// MONGODB_URI that cannot be edited, so the app has its own name to point at the right cluster.
+const mongoUri = () => process.env.PRINTPIX_MONGODB_URI || process.env.MONGODB_URI;
+
+export const mongoEnabled = () => Boolean(mongoUri());
 
 // Kept on globalThis so Next.js dev reloads reuse the same connection.
 const g = globalThis as unknown as { __printpixMongo?: Promise<Db> };
@@ -15,7 +19,7 @@ const g = globalThis as unknown as { __printpixMongo?: Promise<Db> };
 export function getDb(): Promise<Db> {
   if (!g.__printpixMongo) {
     g.__printpixMongo = (async () => {
-      const client = new MongoClient(process.env.MONGODB_URI!, { serverSelectionTimeoutMS: 8000 });
+      const client = new MongoClient(mongoUri()!, { serverSelectionTimeoutMS: 8000 });
       await client.connect();
       const db = client.db(process.env.MONGODB_DB || 'printpix');
       await Promise.all([

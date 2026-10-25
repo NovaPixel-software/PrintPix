@@ -18,7 +18,7 @@ stored in MongoDB. Without it the app keeps them in memory and everything resets
 
 | Variable | What it is |
 | --- | --- |
-| `MONGODB_URI` | Atlas connection string (Atlas > Connect > Drivers) |
+| `PRINTPIX_MONGODB_URI` | Atlas connection string (Atlas > Connect > Drivers). `MONGODB_URI` also works, but this name wins. Use it on Vercel, whose MongoDB integration injects a locked `MONGODB_URI` |
 | `MONGODB_DB` | Database name, default `printpix` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | The first admin. Created once, only when the database has no admin yet |
 | `SESSION_SECRET` | Signs the login cookie. Without it everyone is signed out after a restart |
