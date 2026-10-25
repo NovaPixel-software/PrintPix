@@ -27,7 +27,7 @@ export const api = {
     call<{ event: PublicEvent }>(`/api/events/${id}`, { method: 'PATCH', body: JSON.stringify(setup) }),
   countEvent: (id: string, kind: 'download' | 'print') => call<{ event: PublicEvent }>(`/api/events/${id}/count`, post({ kind })),
   users: () => call<{ users: PublicUser[] }>('/api/admin/users'),
-  createUser: (body: { name: string; email: string; password: string }) => call<{ user: PublicUser }>('/api/admin/users', post(body)),
-  updateUser: (id: string, body: { name?: string; status?: 'active' | 'inactive'; password?: string }) =>
+  createUser: (body: { name: string; email: string; password: string; expiresAt?: string }) => call<{ user: PublicUser }>('/api/admin/users', post(body)),
+  updateUser: (id: string, body: { name?: string; email?: string; expiresAt?: string; status?: 'active' | 'inactive'; password?: string }) =>
     call<{ user: PublicUser }>(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 };

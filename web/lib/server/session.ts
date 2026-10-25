@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { userRepo, type Role, type UserRecord } from './db';
+import { isExpired } from './expiry';
 
 export const SESSION_COOKIE = 'printpix_session';
 const SESSION_DAYS = 7;
@@ -52,7 +53,8 @@ export async function getSession(): Promise<UserRecord | null> {
   const uid = readToken(store.get(SESSION_COOKIE)?.value);
   if (!uid) return null;
   const user = await userRepo.get(uid);
-  return user && user.status === 'active' ? user : null;
+  // An expired account stops working on its next request, same as an inactive one.
+  return user && user.status === 'active' && !isExpired(user) ? user : null;
 }
 
 /** For user pages. Signed-out goes to /login; an admin goes to the admin page. */

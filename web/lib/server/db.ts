@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Collection } from 'mongodb';
+import { addMonthsIso, daysLeft, isExpired, todayIso } from './expiry';
 import { getDb, mongoEnabled } from './mongo';
 
 /*
@@ -18,12 +19,13 @@ export interface UserRecord {
   role: Role;
   status: UserStatus;
   lastLogin: string | null; // ISO timestamp
+  expiresAt: string | null; // YYYY-MM-DD, the last day the account works. null = never (admins)
   passwordHash: string;
   createdAt: string;
 }
 
-export type NewUser = Pick<UserRecord, 'name' | 'email' | 'role' | 'status'> & { password: string };
-export type UserPatch = Partial<Pick<UserRecord, 'name' | 'status' | 'lastLogin'>> & { password?: string };
+export type NewUser = Pick<UserRecord, 'name' | 'email' | 'role' | 'status' | 'expiresAt'> & { password: string };
+export type UserPatch = Partial<Pick<UserRecord, 'name' | 'email' | 'status' | 'lastLogin' | 'expiresAt'>> & { password?: string };
 
 export interface UserRepo {
   list(): Promise<UserRecord[]>;
@@ -47,21 +49,30 @@ export function verifyPassword(password: string, stored: string): boolean {
 }
 
 function seed(): UserRecord[] {
-  const make = (name: string, email: string, role: Role, status: UserStatus, password: string, lastLoginHoursAgo: number | null): UserRecord => ({
+  const make = (
+    name: string,
+    email: string,
+    role: Role,
+    status: UserStatus,
+    password: string,
+    lastLoginHoursAgo: number | null,
+    expiresAt: string | null,
+  ): UserRecord => ({
     id: randomBytes(6).toString('hex'),
     name,
     email,
     role,
     status,
+    expiresAt,
     lastLogin: lastLoginHoursAgo == null ? null : new Date(Date.now() - lastLoginHoursAgo * 36e5).toISOString(),
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
   });
   return [
-    make('Sarah Jenkins', 'admin@printpix.io', 'admin', 'active', 'admin123', 0),
-    make('Marcus Vance', 'marcus@printpix.io', 'user', 'active', 'user12345', 2),
-    make('Elena Rostova', 'elena@printpix.io', 'user', 'active', 'user12345', 18),
-    make('David Kalu', 'david@printpix.io', 'user', 'inactive', 'user12345', 120),
+    make('Sarah Jenkins', 'admin@printpix.io', 'admin', 'active', 'admin123', 0, null),
+    make('Marcus Vance', 'marcus@printpix.io', 'user', 'active', 'user12345', 2, addMonthsIso(todayIso(), 12)),
+    make('Elena Rostova', 'elena@printpix.io', 'user', 'active', 'user12345', 18, addMonthsIso(todayIso(), 1)),
+    make('David Kalu', 'david@printpix.io', 'user', 'inactive', 'user12345', 120, addMonthsIso(todayIso(), 12)),
   ];
 }
 
@@ -102,7 +113,8 @@ class MemoryUserRepo implements UserRepo {
 
 type UserDoc = Omit<UserRecord, 'id'> & { _id: string };
 
-const toRecord = ({ _id, ...rest }: UserDoc): UserRecord => ({ id: _id, ...rest });
+// Documents saved before expiry existed have no expiresAt, which means they never expire.
+const toRecord = ({ _id, expiresAt, ...rest }: UserDoc): UserRecord => ({ id: _id, expiresAt: expiresAt ?? null, ...rest });
 
 class MongoUserRepo implements UserRepo {
   private ready?: Promise<Collection<UserDoc>>;
@@ -121,6 +133,7 @@ class MongoUserRepo implements UserRepo {
             email,
             role: 'admin',
             status: 'active',
+            expiresAt: null,
             lastLogin: null,
             passwordHash: hashPassword(password),
             createdAt: new Date().toISOString(),
@@ -179,7 +192,7 @@ export const userRepo: UserRepo = (g.__printpixUsersV3 ??= mongoEnabled() ? new 
 
 export function publicUser(u: UserRecord) {
   const { passwordHash: _omit, ...rest } = u;
-  return rest;
+  return { ...rest, expired: isExpired(u), daysLeft: u.role === 'user' ? daysLeft(u.expiresAt) : null };
 }
 
 export type PublicUser = ReturnType<typeof publicUser>;

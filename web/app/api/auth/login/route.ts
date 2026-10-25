@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { publicUser, userRepo, verifyPassword } from '@/lib/server/db';
+import { formatIsoDate, isExpired } from '@/lib/server/expiry';
 import { cookieOptions, createSessionToken, homeFor, SESSION_COOKIE } from '@/lib/server/session';
 
 // One sign-in for everyone. The account's role decides where they land.
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
   }
   if (user.status !== 'active') {
     return NextResponse.json({ code: 'INACTIVE', message: 'Your account is inactive. Contact your admin.' }, { status: 403 });
+  }
+
+  if (isExpired(user)) {
+    return NextResponse.json({ code: 'EXPIRED', message: `Your account expired on ${formatIsoDate(user.expiresAt!)}. Contact your admin.` }, { status: 403 });
   }
 
   await userRepo.update(user.id, { lastLogin: new Date().toISOString() });

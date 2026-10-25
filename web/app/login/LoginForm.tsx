@@ -36,7 +36,8 @@ export default function LoginForm() {
     }
   };
 
-  const inactive = error?.code === 'INACTIVE';
+  // An inactive or expired account is not a typing mistake, so it gets a calmer amber box instead of red.
+  const inactive = error?.code === 'INACTIVE' || error?.code === 'EXPIRED';
   const border = error && !inactive ? 'border-error' : 'border-surface-container-high';
 
   return (
@@ -92,7 +93,7 @@ export default function LoginForm() {
           role="alert"
           className={`mt-4 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-body-md ${inactive ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-error-container bg-error-container/50 text-on-error-container'}`}
         >
-          <Icon name={inactive ? 'block' : 'error'} className="!text-[18px]" fill />
+          <Icon name={error.code === 'EXPIRED' ? 'event_busy' : inactive ? 'block' : 'error'} className="!text-[18px]" fill />
           <span>{error.message}</span>
         </div>
       )}

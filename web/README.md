@@ -34,7 +34,12 @@ are **not** created, only the admin from the variables above.
 - **Only an admin can add users.** There is no sign-up. The admin sets the first password.
 - **A signed-in user can change their own password** in Settings (needs the current password, 8+ characters).
 - **Active / inactive is controlled by the admin.** An inactive user cannot sign in, and an open session
-  stops working on its next request. The admin can also reset a user's password.
+  stops working on its next request.
+- **Every user has a created date and an expiry date.** The admin picks the expiry when adding the user (a year from
+  today by default) and can change it any time in Edit. The account works through that day, then it cannot sign in
+  and an open session stops on its next request. "Today" is worked out in `APP_TIMEZONE` (default `Asia/Kolkata`).
+  Admins never expire. The Users table has Created and Expires columns and an Expired tab.
+- **Edit user** (admin): name, email, expiry date, active/inactive and a new password.
 
 ## Demo accounts (in-memory mode only, `lib/server/db.ts`)
 
@@ -71,15 +76,15 @@ Restarting the server resets accounts to this seed.
 
 | Method and path | Who | Purpose |
 | --- | --- | --- |
-| `POST /api/auth/login` | anyone | Body `{ email, password }`. Returns `redirectTo`. Errors: `INVALID`, `INACTIVE`, `MISSING` |
+| `POST /api/auth/login` | anyone | Body `{ email, password }`. Returns `redirectTo`. Errors: `INVALID`, `INACTIVE`, `EXPIRED`, `MISSING` |
 | `POST /api/auth/logout` | signed in | Sign out |
 | `POST /api/auth/password` | signed in | Body `{ current, next }` |
 | `POST /api/events` | user | Create an event with just a `name` |
 | `PATCH /api/events/[id]` | event owner | Choose or change the setup (`productId`, `shapeId`, `templateId`, `paperId`) |
 | `POST /api/events/[id]/count` | event owner | Body `{ kind: 'download' | 'print' }`, adds one to that counter |
 | `GET /api/admin/users` | admin | List users |
-| `POST /api/admin/users` | admin | Add a user (`name`, `email`, `password`) |
-| `PATCH /api/admin/users/[id]` | admin | `name`, `status` (`active` / `inactive`), `password` (reset) |
+| `POST /api/admin/users` | admin | Add a user (`name`, `email`, `password`, optional `expiresAt`, default one year) |
+| `PATCH /api/admin/users/[id]` | admin | Any of `name`, `email`, `expiresAt` (`YYYY-MM-DD`), `status` (`active` / `inactive`), `password` |
 
 ## Not built yet
 
