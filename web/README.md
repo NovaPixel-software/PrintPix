@@ -40,6 +40,7 @@ are **not** created, only the admin from the variables above.
   and an open session stops on its next request. "Today" is worked out in `APP_TIMEZONE` (default `Asia/Kolkata`).
   Admins never expire. The Users table has Created and Expires columns and an Expired tab.
 - **Edit user** (admin): name, email, expiry date, active/inactive and a new password.
+- **Support contact.** Users who are locked out, forgot a password, or need an account extended are pointed to `support@novapixelsoftware.com` (login page, login errors, Settings). It is one constant in `lib/support.ts`.
 - **Usage totals** (admin): the Users page shows each user's total events, downloads and prints (summed over all their events), plus overall totals across all users at the top.
 
 ## Demo accounts (in-memory mode only, `lib/server/db.ts`)

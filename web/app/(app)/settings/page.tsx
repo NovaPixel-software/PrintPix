@@ -1,3 +1,4 @@
+import SupportLink from '@/components/SupportLink';
 import { daysLeft, formatIsoDate } from '@/lib/server/expiry';
 import { requireUser } from '@/lib/server/session';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
@@ -33,12 +34,12 @@ export default async function SettingsPage() {
             )}
           </dd>
         </dl>
-        {left !== null && left <= 30 && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-body-md text-amber-900">Your account expires soon. Ask your admin to extend it.</p>}
+        {left !== null && left <= 30 && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-body-md text-amber-900">Your account expires soon. Contact <SupportLink /> to extend it.</p>}
       </section>
 
       <section className="rounded-2xl border border-surface-container-high bg-surface-container-lowest p-5 shadow-sm">
         <h2 className="mb-1 text-label-md uppercase tracking-wider text-secondary">Change password</h2>
-        <p className="mb-4 text-body-md text-secondary">Your admin gave you the first password. Pick your own here.</p>
+        <p className="mb-4 text-body-md text-secondary">You were given a first password. Pick your own here.</p>
         <ChangePasswordForm />
       </section>
     </div>

@@ -1,4 +1,5 @@
 import LoginForm from '@/app/login/LoginForm';
+import SupportLink from '@/components/SupportLink';
 import { Logo } from '@/components/ui';
 
 const steps = [
@@ -13,7 +14,9 @@ export default function LoginShell() {
       <header className="border-b border-surface-container-high bg-white">
         <div className="mx-auto flex max-w-[1180px] items-center justify-between px-gutter-mobile py-3 md:px-7">
           <Logo className="h-10" />
-          <span className="hidden text-body-md text-secondary sm:block">Need help? Contact your admin</span>
+          <span className="hidden text-body-md text-secondary sm:block">
+            Need help? Contact <SupportLink />
+          </span>
         </div>
       </header>
 

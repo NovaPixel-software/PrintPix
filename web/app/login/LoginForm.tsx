@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiError, api } from '@/lib/api';
+import SupportLink, { withSupportLink } from '@/components/SupportLink';
 import { Icon, Spinner } from '@/components/ui';
 
 const input =
@@ -49,7 +50,7 @@ export default function LoginForm() {
       <span className="absolute inset-x-8 -top-px h-1 rounded-b-md bg-gradient-to-r from-primary-container via-[#ff9a3c] to-[#12306a]" />
 
       <h1 className="text-headline-lg font-extrabold text-navy">Sign in</h1>
-      <p className="mt-1 text-body-lg text-secondary">Use the email and password from your admin.</p>
+      <p className="mt-1 text-body-lg text-secondary">Use the email and password you were given.</p>
 
       <label htmlFor="email" className="mb-1.5 mt-5 block text-label-lg text-navy">
         Email
@@ -94,7 +95,7 @@ export default function LoginForm() {
           className={`mt-4 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-body-md ${inactive ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-error-container bg-error-container/50 text-on-error-container'}`}
         >
           <Icon name={error.code === 'EXPIRED' ? 'event_busy' : inactive ? 'block' : 'error'} className="!text-[18px]" fill />
-          <span>{error.message}</span>
+          <span>{withSupportLink(error.message)}</span>
         </div>
       )}
 
@@ -112,7 +113,9 @@ export default function LoginForm() {
         )}
       </button>
 
-      <p className="mt-4 text-center text-body-md text-secondary">Forgot your password? Ask your admin to reset it.</p>
+      <p className="mt-4 text-center text-body-md text-secondary">
+        Forgot your password? Contact <SupportLink />
+      </p>
 
       <div className="mt-5 flex items-start gap-2.5 border-t border-surface-container-high pt-4 text-body-md text-secondary">
         <Icon name="verified_user" className="!text-[18px] text-emerald-600" fill />
