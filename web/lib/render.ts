@@ -105,6 +105,7 @@ function areaDownscale(src: ImageBitmap | HTMLCanvasElement, dw: number, dh: num
   const g0 = c0.getContext('2d', { willReadFrequently: true })!;
   g0.drawImage(src, 0, 0);
   const px = g0.getImageData(0, 0, sw, sh).data;
+  c0.width = c0.height = 0; // let go of the canvas now, phones (iPhone Safari above all) keep it until much later
 
   // pass 1: width sw -> dw, for every row. Channels are held premultiplied by alpha: R*A, G*A, B*A, A.
   const mid = new Float32Array(dw * sh * 4);
@@ -165,14 +166,26 @@ function areaDownscale(src: ImageBitmap | HTMLCanvasElement, dw: number, dh: num
 }
 
 /** Exactly averaged copies for the printed sheet, kept so print and download after each other do not repeat the work. */
-const exactCache = new WeakMap<ImageBitmap, Map<number, HTMLCanvasElement>>();
+let exactCache = new WeakMap<ImageBitmap, Map<number, HTMLCanvasElement>>();
+const exactCanvases: HTMLCanvasElement[] = [];
+
+/** Frees the memory held by the exact copies. A phone cannot keep twelve of them and a big sheet at the same time. */
+export function releaseExactCopies() {
+  for (const c of exactCanvases) c.width = c.height = 0;
+  exactCanvases.length = 0;
+  exactCache = new WeakMap();
+}
 
 function exactCopy(bmp: ImageBitmap, deviceScale: number): HTMLCanvasElement {
   const dw = Math.max(1, Math.round(bmp.width * deviceScale));
   let byWidth = exactCache.get(bmp);
   if (!byWidth) exactCache.set(bmp, (byWidth = new Map()));
   let hit = byWidth.get(dw);
-  if (!hit) byWidth.set(dw, (hit = areaDownscale(bmp, dw, Math.max(1, Math.round(bmp.height * deviceScale)))));
+  if (!hit) {
+    hit = areaDownscale(bmp, dw, Math.max(1, Math.round(bmp.height * deviceScale)));
+    exactCanvases.push(hit);
+    byWidth.set(dw, hit);
+  }
   return hit;
 }
 
@@ -381,8 +394,13 @@ export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Pho
   await ensureLabelFonts(); // labels must be drawn in their real fonts, not a fallback
   await preloadFrames(slots.map((p) => p?.label?.frame)); // and overlay designs must be in
   const c = canvasOf(Math.round(layout.pxW * scale), Math.round(layout.pxH * scale));
-  drawSheet(c, layout, clip, slots, PX_PER_MM * scale);
-  return withDpi(await toBlob(c, 'image/png'), Math.round(DPI * scale));
+  try {
+    drawSheet(c, layout, clip, slots, PX_PER_MM * scale);
+    return await withDpi(await toBlob(c, 'image/png'), Math.round(DPI * scale));
+  } finally {
+    c.width = c.height = 0;
+    releaseExactCopies();
+  }
 }
 
 /* ---------- Photo import ---------- */
@@ -396,7 +414,9 @@ const MAX_SIDE = 2400;
  */
 export async function importPhoto(file: File): Promise<Photo> {
   const full = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const k = Math.min(1, MAX_SIDE / Math.max(full.width, full.height));
+  // phones keep every photo in memory, so they get smaller copies: 1800 px is still more than a 60 mm print needs even at 2x zoom
+  const maxSide = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 1800 : MAX_SIDE;
+  const k = Math.min(1, maxSide / Math.max(full.width, full.height));
   let bmp = full;
   if (k < 1) {
     bmp = await createImageBitmap(areaDownscale(full, Math.round(full.width * k), Math.round(full.height * k)));

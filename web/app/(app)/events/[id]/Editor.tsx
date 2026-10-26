@@ -281,14 +281,16 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
 
   /** The sheet, full size if the device can manage it, and smaller if it runs out of memory (phones). */
   const makeSheet = async () => {
+    let last: unknown = null;
     for (const scale of [1, 0.67, 0.5]) {
       try {
         return await exportPng(layout, shape.clip, photos, scale);
-      } catch {
-        // try a smaller canvas
+      } catch (e) {
+        last = e; // try a smaller canvas
+        console.error('Sheet export failed at scale', scale, e);
       }
     }
-    throw new Error('export failed');
+    throw last instanceof Error ? last : new Error('export failed');
   };
 
   // On a phone the sheet takes a few seconds to make, and by then the browser no longer counts the tap as a click, so it blocks
@@ -299,8 +301,14 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     setReady(null);
   };
 
+  // what the buttons and the overlay show while a sheet is being made, and for a moment after a download
+  const [job, setJob] = useState<'download' | 'print' | null>(null);
+  const [justDone, setJustDone] = useState(false);
+
   const download = async () => {
     setBusy(true);
+    setJob('download');
+    setJustDone(false);
     try {
       const blob = await makeSheet();
       const name = `${event.name} - sheet ${event.downloads + 1}.png`;
@@ -316,10 +324,13 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
         setTimeout(() => URL.revokeObjectURL(a.href), 10000);
       }
       void count('download');
-    } catch {
-      setBanner('Could not make the sheet on this device. Try fewer photos on the sheet, or use a computer.');
+      setJustDone(true);
+      setTimeout(() => setJustDone(false), 4000);
+    } catch (e) {
+      setBanner(`Could not make the sheet on this device (${e instanceof Error ? e.message : 'unknown error'}). Try fewer photos on the sheet, or use a computer.`);
     } finally {
       setBusy(false);
+      setJob(null);
     }
   };
 
@@ -327,12 +338,14 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const [printUrl, setPrintUrl] = useState<string | null>(null);
   const print = async () => {
     setBusy(true);
+    setJob('print');
     try {
       setPrintUrl(URL.createObjectURL(await makeSheet()));
-    } catch {
-      setBanner('Could not make the sheet on this device. Try fewer photos on the sheet, or use a computer.');
+    } catch (e) {
+      setBanner(`Could not make the sheet on this device (${e instanceof Error ? e.message : 'unknown error'}). Try fewer photos on the sheet, or use a computer.`);
     } finally {
       setBusy(false);
+      setJob(null);
     }
   };
   useEffect(() => {
@@ -417,7 +430,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               {busy && (
                 <div className="absolute inset-0 flex items-center justify-center rounded bg-navy/50 text-white">
                   <span className="flex items-center gap-2 rounded-full bg-navy px-4 py-2 text-label-lg">
-                    <Spinner /> Preparing…
+                    <Spinner /> {job ? 'Preparing your sheet… this can take a few seconds' : 'Preparing…'}
                   </span>
                 </div>
               )}
@@ -577,11 +590,16 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
                   <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · 300 DPI PNG</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={print} disabled={placed === 0} className="flex h-10 items-center gap-2 rounded-lg bg-surface-container px-4 text-label-lg text-navy hover:bg-surface-container-high disabled:opacity-40">
-                    <Icon name="print" className="!text-[18px]" /> Print
+                  <button onClick={print} disabled={placed === 0 || busy} className="flex h-10 items-center gap-2 rounded-lg bg-surface-container px-4 text-label-lg text-navy hover:bg-surface-container-high disabled:opacity-40">
+                    {job === 'print' ? <Spinner /> : <Icon name="print" className="!text-[18px]" />} {job === 'print' ? 'Preparing…' : 'Print'}
                   </button>
-                  <button onClick={download} disabled={placed === 0} className="flex h-10 items-center gap-2 rounded-lg bg-navy px-4 text-label-lg text-white hover:bg-[#16305c] disabled:opacity-40">
-                    <Icon name="download" className="!text-[18px]" /> PNG
+                  <button
+                    onClick={download}
+                    disabled={placed === 0 || busy}
+                    className={`flex h-10 items-center gap-2 rounded-lg px-4 text-label-lg text-white transition disabled:opacity-60 ${justDone ? 'bg-[#1e8e4e]' : 'bg-navy hover:bg-[#16305c]'}`}
+                  >
+                    {job === 'download' ? <Spinner /> : <Icon name={justDone ? 'check_circle' : 'download'} className="!text-[18px]" />}
+                    {job === 'download' ? 'Preparing…' : justDone ? 'Downloaded' : 'PNG'}
                   </button>
                 </div>
               </div>
