@@ -17,6 +17,20 @@ export function coverScale(imgW: number, imgH: number, w: number, h: number, deg
 
 const totalAngle = (p: Pick<Photo, 'rot' | 'tilt'>) => p.rot + p.tilt;
 
+/** The smallest zoom the editor allows. Below 1 the whole photo shows and the rest of the slot is filled with a soft blur of it. */
+export const MIN_ZOOM = 0.25;
+
+/** The zoom at which the whole photo, turned as it is now, fits inside the slot (so nothing is cut off). */
+export function fitZoom(p: Pick<Photo, 'rot' | 'tilt' | 'bmp'>, slotW: number, slotH: number): number {
+  const r = (totalAngle(p) * Math.PI) / 180;
+  const c = Math.abs(Math.cos(r));
+  const s = Math.abs(Math.sin(r));
+  const iw = p.bmp.width;
+  const ih = p.bmp.height;
+  const whole = Math.min(slotW / (iw * c + ih * s), slotH / (iw * s + ih * c));
+  return Math.max(MIN_ZOOM, Math.min(1, whole / coverScale(iw, ih, slotW, slotH, totalAngle(p))));
+}
+
 function scaleOf(p: Photo, slotW: number, slotH: number) {
   return coverScale(p.bmp.width, p.bmp.height, slotW, slotH, totalAngle(p)) * p.zoom;
 }
@@ -43,6 +57,7 @@ function covers(p: Photo, slotW: number, slotH: number, dx: number, dy: number):
 
 /** Pulls the pan back along its direction until the photo covers the slot again. */
 export function clampPan(p: Photo, slotW: number, slotH: number): { ox: number; oy: number } {
+  if (p.zoom < 1) return { ox: 0, oy: 0 }; // the whole photo is showing, there is nothing to slide
   const dx = p.ox * slotW;
   const dy = p.oy * slotH;
   if (covers(p, slotW, slotH, dx, dy)) return { ox: p.ox, oy: p.oy };
@@ -195,10 +210,32 @@ function steppedDown(bmp: ImageBitmap, deviceScale: number): { src: CanvasImageS
   return { src: hit, w: hit.width };
 }
 
+/** Fills the slot behind a zoomed-out photo with a soft blur of the same photo, so the empty parts do not look bare. */
+function drawBlurBackdrop(ctx: CanvasRenderingContext2D, p: Photo, s: Rect, pxPerMm: number) {
+  ctx.save();
+  ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+  ctx.rotate((totalAngle(p) * Math.PI) / 180);
+  const k = coverScale(p.bmp.width, p.bmp.height, s.w, s.h, totalAngle(p)) * 1.08; // a little over cover, so the blur has no thin edge
+  const { src, w } = steppedDown(p.bmp, k * pxPerMm);
+  const kk = (k * p.bmp.width) / w;
+  ctx.scale(kk, kk);
+  const sw = (src as { width: number }).width;
+  const sh = (src as { height: number }).height;
+  const canBlur = typeof (ctx as { filter?: unknown }).filter === 'string'; // Safari has no canvas filter, it gets a plain white fill
+  if (canBlur) ctx.filter = `blur(${Math.max(2, s.w * 0.05 * pxPerMm)}px)`;
+  else {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-sw / 2, -sh / 2, sw, sh);
+  }
+  ctx.drawImage(src, -sw / 2, -sh / 2);
+  ctx.restore();
+}
+
 function drawPhoto(ctx: CanvasRenderingContext2D, p: Photo, s: Rect, clip: ClipKind, pxPerMm: number, exact: boolean) {
   ctx.save();
   path(ctx, s, clip);
   ctx.clip();
+  if (p.zoom < 1) drawBlurBackdrop(ctx, p, s, pxPerMm);
   ctx.save();
   ctx.translate(s.x + s.w / 2 + p.ox * s.w, s.y + s.h / 2 + p.oy * s.h);
   ctx.rotate((totalAngle(p) * Math.PI) / 180);

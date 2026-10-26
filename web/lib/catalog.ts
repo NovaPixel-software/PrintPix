@@ -123,13 +123,13 @@ const LEGACY_TEMPLATE_IDS: Record<string, string> = {
 export const TEMPLATES: Template[] = [
   // Fridge magnets: round first, then square
   cutTemplate(ROUND_CUT_ID, 'round', 60.3, 60.3, RING_ROUND_MM, SPACE_ROUND, '58 mm round · inner 60.3 mm · outer 68.3 mm'),
-  t('magnet', 'round', 50),
+  cutTemplate('magnet-round-50x50', 'round', 50, 50, RING_ROUND_MM, SPACE_ROUND),
   cutTemplate(SQUARE_CUT_ID, 'square', 54.1, 54.1, RING_SQUARE_MM, SPACE_SQUARE, 'Square · photo 54.1 mm · cut 64.4 mm'),
-  t('magnet', 'square', 50),
+  cutTemplate('magnet-square-50x50', 'square', 50, 50, RING_SQUARE_MM, SPACE_SQUARE),
   magnetRect('rect-landscape', 80, 53),
   magnetRect('rect-landscape', 89, 51),
   magnetRect('rect-portrait', 53, 80),
-  t('magnet', 'round', 37),
+  cutTemplate('magnet-round-37x37', 'round', 37, 37, RING_ROUND_MM, SPACE_ROUND),
   t('magnet', 'oval', 76, 51),
   t('magnet', 'rounded', 80, 53),
   // Photo prints

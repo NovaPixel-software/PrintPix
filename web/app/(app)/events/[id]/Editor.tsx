@@ -6,7 +6,7 @@ import { Icon, Spinner } from '@/components/ui';
 import { resolveSetup, type ConfiguredEvent } from '@/lib/event';
 import { ApiError, api } from '@/lib/api';
 import { DEFAULT_LABEL, ensureLabelFonts, preloadFrames } from '@/lib/labels';
-import { clampPan, drawSheet, exportPng, hitSlot, importPhoto } from '@/lib/render';
+import { clampPan, drawSheet, exportPng, fitZoom, hitSlot, importPhoto, MIN_ZOOM } from '@/lib/render';
 import type { PublicEvent } from '@/lib/server/events';
 import type { NameLabel, Photo, SlotData } from '@/lib/types';
 import LabelPanel from './LabelPanel';
@@ -116,7 +116,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
       setPhotos((prev) =>
         prev.map((p, idx) => {
           if (idx !== i || !p) return p;
-          const next = { ...p, zoom: Math.min(3, Math.max(1, p.zoom + d)) };
+          const next = { ...p, zoom: Math.min(3, Math.max(MIN_ZOOM, p.zoom + d)) };
           const s = layout.slots[i];
           return { ...next, ...clampPan(next, s.w, s.h) };
         }),
@@ -158,6 +158,10 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
         const replaced = photos[targets[n]];
         const fresh = await importPhoto(file);
         if (replaced?.label) fresh.label = replaced.label; // replacing a photo keeps the name written on it
+        else if (applyAll) {
+          const look = photos.find((q) => q?.label)?.label;
+          if (look) fresh.label = { ...look, text: '' }; // a new photo starts with the same look, and its own empty name
+        }
         next[targets[n]] = fresh;
       } catch {
         failed++;
@@ -237,9 +241,15 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   /* ---- name labels ---- */
   // Merges into the label as it is right now (not as it was at the last render), so quick clicks on design,
   // colour and font in a row do not undo each other.
+  // With "Apply to all photos" on, every change to the look (not the name) goes to all photos, and new photos get the same look.
+  const [applyAll, setApplyAll] = useState(true);
+
   const setLabel = (change: Partial<NameLabel>) => {
     const i = selected;
-    setPhotos((prev) => prev.map((p, idx) => (idx === i && p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), ...change } } : p)));
+    const look = !('text' in change);
+    setPhotos((prev) =>
+      prev.map((p, idx) => (p && (idx === i || (applyAll && look)) ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), ...change } } : p)),
+    );
   };
 
   const sameDesignForAll = () => {
@@ -247,6 +257,12 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     setPhotos((prev) =>
       prev.map((p) => (p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), color: from.color, frame: from.frame, ribbon: from.ribbon, ribbonColor: from.ribbonColor, font: from.font, size: from.size, bold: from.bold, italic: from.italic, stroke: from.stroke, strokeColor: from.strokeColor } } : p)),
     );
+  };
+
+  // Writes the selected photo's name on every photo, for a sheet where all of them carry the same name (the event name, say).
+  const sameNameForAll = () => {
+    const from = sel?.label ?? DEFAULT_LABEL;
+    setPhotos((prev) => prev.map((p) => (p ? { ...p, label: { ...(p.label ?? DEFAULT_LABEL), ...(applyAll ? from : {}), text: from.text } } : p)));
   };
 
   const remove = () => {
@@ -360,6 +376,14 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               </button>
               <button
                 disabled={!sel}
+                onClick={() => sel && patch(selected, { zoom: fitZoom(sel, layout.slots[selected].w, layout.slots[selected].h), ox: 0, oy: 0 })}
+                title="Zoom out until the whole photo shows, so nothing is cut off"
+                className="flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-label-md text-white hover:bg-white/10 disabled:opacity-40 sm:px-4 sm:py-2"
+              >
+                <Icon name="fit_screen" className="!text-[16px]" /> Fit whole photo
+              </button>
+              <button
+                disabled={!sel}
                 onClick={() => patch(selected, { zoom: 1, rot: 0, tilt: 0, ox: 0, oy: 0 })}
                 className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-label-md text-white hover:bg-white/10 disabled:opacity-40 sm:px-4 sm:py-2"
               >
@@ -409,11 +433,11 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
                   <span className="text-primary-container">{zoomPct}%</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <StepButton icon="remove" label="Zoom out" onClick={() => patch(selected, { zoom: Math.max(1, (sel?.zoom ?? 1) - 0.1) })} />
+                  <StepButton icon="remove" label="Zoom out" onClick={() => patch(selected, { zoom: Math.max(MIN_ZOOM, (sel?.zoom ?? 1) - 0.1) })} />
                   <input
                     type="range"
                     className="slider flex-1"
-                    min={100}
+                    min={Math.round(MIN_ZOOM * 100)}
                     max={300}
                     value={zoomPct}
                     onChange={(e) => patch(selected, { zoom: Number(e.target.value) / 100 })}
@@ -453,7 +477,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               {!sel && <p className="mt-3 text-body-md text-secondary">Tap an empty slot on the sheet to add a photo, then adjust it here.</p>}
             </Panel>
 
-            <LabelPanel label={sel?.label} hasPhoto={!!sel} slotNo={selected + 1} placedCount={photos.filter(Boolean).length} onChange={setLabel} onApplyToAll={sameDesignForAll} />
+            <LabelPanel label={sel?.label} hasPhoto={!!sel} slotNo={selected + 1} onChange={setLabel} onApplyNameToAll={sameNameForAll} applyAll={applyAll} onApplyAllChange={(on) => { setApplyAll(on); if (on) sameDesignForAll(); }} />
 
             <Panel>
               <p className="mb-3 text-label-md uppercase tracking-wider text-secondary">Automation &amp; Queue</p>

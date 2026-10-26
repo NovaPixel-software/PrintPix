@@ -20,16 +20,18 @@ export default function LabelPanel({
   label,
   hasPhoto,
   slotNo,
-  placedCount,
+  onApplyNameToAll,
+  applyAll,
+  onApplyAllChange,
   onChange,
-  onApplyToAll,
 }: {
   label: NameLabel | null | undefined;
   hasPhoto: boolean;
   slotNo: number;
-  placedCount: number;
+  onApplyNameToAll: () => void;
+  applyAll: boolean;
+  onApplyAllChange: (on: boolean) => void;
   onChange: (change: Partial<NameLabel>) => void;
-  onApplyToAll: () => void;
 }) {
   const l = label ?? DEFAULT_LABEL;
   const active = 'bg-primary-container text-white shadow';
@@ -54,6 +56,14 @@ export default function LabelPanel({
             </span>
             <input className={input} value={l.text} maxLength={MAX_LABEL_CHARS} onChange={(e) => onChange({ text: e.target.value })} placeholder="e.g. Johnathan" />
           </label>
+          <button
+            type="button"
+            onClick={onApplyNameToAll}
+            disabled={!l.text.trim()}
+            className="-mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-surface-container text-label-md text-navy hover:bg-surface-container-high disabled:opacity-40"
+          >
+            <Icon name="content_copy" className="!text-[16px]" /> Use this name on all photos
+          </button>
 
           <Dropdown
             label="Design"
@@ -148,15 +158,11 @@ export default function LabelPanel({
             <input type="range" className="slider w-full" min={60} max={160} step={5} value={Math.round(l.size * 100)} onChange={(e) => onChange({ size: Number(e.target.value) / 100 })} aria-label="Label size" />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onApplyToAll}
-              disabled={placedCount < 2}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg bg-surface-container text-label-md text-navy hover:bg-surface-container-high disabled:opacity-40"
-            >
-              <Icon name="content_copy" className="!text-[16px]" /> Same design for all
-            </button>
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-surface-container px-3 py-2.5">
+            <input type="checkbox" checked={applyAll} onChange={(e) => onApplyAllChange(e.target.checked)} className="h-4 w-4 accent-[#ff5e00]" />
+            <span className="text-label-lg text-navy">Apply this design to all photos</span>
+          </label>
+          <div className="grid grid-cols-1 gap-2">
             <button
               type="button"
               onClick={() => onChange({ text: '' })}
@@ -166,7 +172,7 @@ export default function LabelPanel({
               <Icon name="delete" className="!text-[16px]" /> Remove name
             </button>
           </div>
-          <p className="text-body-sm text-secondary">Each photo has its own name. &ldquo;Same design for all&rdquo; copies the design, colour, font and size, and keeps each photo&rsquo;s own name.</p>
+          <p className="text-body-sm text-secondary">Each photo has its own name. With the box ticked, the ribbon, colours, font and size are the same on every photo, and new photos get them too. Untick it to style one photo differently.</p>
         </div>
       )}
     </div>
