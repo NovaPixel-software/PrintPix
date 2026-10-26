@@ -54,11 +54,27 @@ function family(f: LabelFont): string {
   return v || (f === 'bold' ? 'system-ui, sans-serif' : 'cursive');
 }
 
-/** Makes sure the label fonts are downloaded. A canvas never triggers that by itself, so ask the browser to load them. */
-export async function ensureLabelFonts(): Promise<void> {
+/**
+ * Makes sure label fonts are downloaded. A canvas never triggers that by itself, so ask the browser to load them.
+ * With `labels` it loads only the fonts those labels use (an export needs nothing else); without, the normal and heavy
+ * weight of every font. A font that fails to download is skipped, the sheet is then drawn in a fallback font instead
+ * of failing: on a phone one slow or dropped font download must not stop a download of the whole sheet.
+ */
+export async function ensureLabelFonts(labels?: (NameLabel | null | undefined)[]): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
-  await Promise.all(LABEL_FONTS.flatMap((f) => [f.normal, f.heavy].flatMap((w) => [`${w} 40px ${family(f.id)}`, `italic ${w} 40px ${family(f.id)}`].map((spec) => document.fonts.load(spec, 'Aa Bb')))));
-  await document.fonts.ready;
+  const specs = new Set<string>();
+  const used = labels?.filter((l): l is NameLabel => !!l?.text.trim());
+  if (used) {
+    for (const l of used) specs.add(fontCss(l, 40));
+  } else {
+    for (const f of LABEL_FONTS) for (const w of [f.normal, f.heavy]) specs.add(`${w} 40px ${family(f.id)}`);
+  }
+  await Promise.allSettled([...specs].map((spec) => document.fonts.load(spec, 'Aa Bb')));
+  try {
+    await document.fonts.ready;
+  } catch {
+    // fonts that did not load are drawn in a fallback
+  }
 }
 
 function luminance(hex: string): number {

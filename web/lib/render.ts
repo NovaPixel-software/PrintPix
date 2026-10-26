@@ -391,7 +391,7 @@ async function withDpi(blob: Blob, dpi: number): Promise<Blob> {
  * the dpi), for phones that cannot hold a full size canvas in memory.
  */
 export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[], scale = 1): Promise<Blob> {
-  await ensureLabelFonts(); // labels must be drawn in their real fonts, not a fallback
+  await ensureLabelFonts(slots.map((p) => p?.label)); // labels should be drawn in their real fonts, not a fallback
   await preloadFrames(slots.map((p) => p?.label?.frame)); // and overlay designs must be in
   const c = canvasOf(Math.round(layout.pxW * scale), Math.round(layout.pxH * scale));
   try {
