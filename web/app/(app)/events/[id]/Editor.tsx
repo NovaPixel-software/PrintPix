@@ -279,19 +279,62 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     }
   };
 
+  /** The sheet, full size if the device can manage it, and smaller if it runs out of memory (phones). */
+  const makeSheet = async () => {
+    for (const scale of [1, 0.67, 0.5]) {
+      try {
+        return await exportPng(layout, shape.clip, photos, scale);
+      } catch {
+        // try a smaller canvas
+      }
+    }
+    throw new Error('export failed');
+  };
+
+  // On a phone the sheet takes a few seconds to make, and by then the browser no longer counts the tap as a click, so it blocks
+  // an automatic download. So the phone gets a "ready" box with its own Save and Share buttons, and the tap on those works.
+  const [ready, setReady] = useState<{ url: string; name: string; file: File } | null>(null);
+  const closeReady = () => {
+    if (ready) URL.revokeObjectURL(ready.url);
+    setReady(null);
+  };
+
   const download = async () => {
-    const blob = await exportPng(layout, shape.clip, photos);
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${event.name} - sheet ${event.downloads + 1}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    void count('download');
+    setBusy(true);
+    try {
+      const blob = await makeSheet();
+      const name = `${event.name} - sheet ${event.downloads + 1}.png`;
+      if (matchMedia('(pointer: coarse)').matches) {
+        setReady({ url: URL.createObjectURL(blob), name, file: new File([blob], name, { type: 'image/png' }) });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      }
+      void count('download');
+    } catch {
+      setBanner('Could not make the sheet on this device. Try fewer photos on the sheet, or use a computer.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   /* The sheet image is mounted in #print-root, the only thing visible when printing. */
   const [printUrl, setPrintUrl] = useState<string | null>(null);
-  const print = async () => setPrintUrl(URL.createObjectURL(await exportPng(layout, shape.clip, photos)));
+  const print = async () => {
+    setBusy(true);
+    try {
+      setPrintUrl(URL.createObjectURL(await makeSheet()));
+    } catch {
+      setBanner('Could not make the sheet on this device. Try fewer photos on the sheet, or use a computer.');
+    } finally {
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     if (!printUrl) return;
     // The browser fires this when the print dialog closes. It cannot tell Print from Cancel, so a
@@ -314,6 +357,31 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
 
   return (
     <div>
+      {ready && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-navy p-4 pb-6 text-white shadow-2xl">
+          <p className="mb-3 flex items-center gap-2 text-label-lg">
+            <Icon name="check_circle" fill className="text-tertiary-container" /> Your sheet is ready
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <a href={ready.url} download={ready.name} className="flex h-11 items-center justify-center gap-2 rounded-lg bg-primary-container text-label-lg text-white">
+              <Icon name="download" className="!text-[20px]" /> Save image
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [ready.file] })) void navigator.share({ files: [ready.file], title: ready.name }).catch(() => {});
+                else window.open(ready.url, '_blank');
+              }}
+              className="flex h-11 items-center justify-center gap-2 rounded-lg bg-white/10 text-label-lg text-white"
+            >
+              <Icon name="share" className="!text-[20px]" /> Share
+            </button>
+          </div>
+          <button type="button" onClick={closeReady} className="mt-3 w-full text-center text-label-md text-white/70">
+            Close
+          </button>
+        </div>
+      )}
       <div className="space-y-space-md">
         {banner && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-gradient-to-r from-primary-container to-[#c24100] px-4 py-3 text-body-md text-white shadow-lg">
@@ -349,7 +417,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               {busy && (
                 <div className="absolute inset-0 flex items-center justify-center rounded bg-navy/50 text-white">
                   <span className="flex items-center gap-2 rounded-full bg-navy px-4 py-2 text-label-lg">
-                    <Spinner /> Preparing photos…
+                    <Spinner /> Preparing…
                   </span>
                 </div>
               )}

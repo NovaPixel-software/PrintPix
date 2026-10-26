@@ -373,13 +373,16 @@ async function withDpi(blob: Blob, dpi: number): Promise<Blob> {
   return new Blob([src.slice(0, afterIhdr), chunk, src.slice(afterIhdr)], { type: 'image/png' });
 }
 
-/** Print-ready PNG at 300 DPI, with the 300 dpi written into the file. */
-export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[]): Promise<Blob> {
+/**
+ * Print-ready PNG at 300 DPI, with the 300 dpi written into the file. `scale` below 1 makes a smaller sheet (and says so in
+ * the dpi), for phones that cannot hold a full size canvas in memory.
+ */
+export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[], scale = 1): Promise<Blob> {
   await ensureLabelFonts(); // labels must be drawn in their real fonts, not a fallback
   await preloadFrames(slots.map((p) => p?.label?.frame)); // and overlay designs must be in
-  const c = canvasOf(layout.pxW, layout.pxH);
-  drawSheet(c, layout, clip, slots, PX_PER_MM);
-  return withDpi(await toBlob(c, 'image/png'), DPI);
+  const c = canvasOf(Math.round(layout.pxW * scale), Math.round(layout.pxH * scale));
+  drawSheet(c, layout, clip, slots, PX_PER_MM * scale);
+  return withDpi(await toBlob(c, 'image/png'), Math.round(DPI * scale));
 }
 
 /* ---------- Photo import ---------- */
