@@ -6,7 +6,7 @@ import { Icon, Spinner } from '@/components/ui';
 import { resolveSetup, type ConfiguredEvent } from '@/lib/event';
 import { ApiError, api } from '@/lib/api';
 import { DEFAULT_LABEL, ensureLabelFonts, preloadFrames } from '@/lib/labels';
-import { clampPan, drawSheet, exportPng, fitZoom, hitSlot, importPhoto, MIN_ZOOM } from '@/lib/render';
+import { clampPan, drawSheet, exportPng, fitZoom, hitSlot, importPhoto, MIN_ZOOM, type SheetFormat } from '@/lib/render';
 import type { PublicEvent } from '@/lib/server/events';
 import type { NameLabel, Photo, SlotData } from '@/lib/types';
 import LabelPanel from './LabelPanel';
@@ -35,6 +35,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const [photos, setPhotos] = useState<(Photo | null)[]>(() => Array(layout.count).fill(null));
   const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [format, setFormat] = useState<'jpeg' | 'pdf'>('jpeg');
   const [maxQuality, setMaxQuality] = useState(true); // 600 DPI by default, untick for 300
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -283,13 +284,13 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   };
 
   /** The sheet, always at the full 300 DPI. It is never made smaller to fit: a lower quality print is worse than an error. */
-  const makeSheet = async () => {
+  const makeSheet = async (as: SheetFormat = format) => {
     try {
-      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1);
+      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1, as);
     } catch (e) {
       console.error('Sheet export failed, trying once more', e);
       await new Promise((r) => setTimeout(r, 300)); // let the browser free the memory of the first try
-      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1);
+      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1, as);
     }
   };
 
@@ -311,9 +312,9 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     setJustDone(false);
     try {
       const blob = await makeSheet();
-      const name = `${event.name} - sheet ${event.downloads + 1}.png`;
+      const name = `${event.name} - sheet ${event.downloads + 1}.${format === 'pdf' ? 'pdf' : 'jpg'}`;
       if (matchMedia('(pointer: coarse)').matches) {
-        setReady({ url: URL.createObjectURL(blob), name, file: new File([blob], name, { type: 'image/png' }) });
+        setReady({ url: URL.createObjectURL(blob), name, file: new File([blob], name, { type: format === 'pdf' ? 'application/pdf' : 'image/jpeg' }) });
       } else {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -340,7 +341,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     setBusy(true);
     setJob('print');
     try {
-      setPrintUrl(URL.createObjectURL(await makeSheet()));
+      setPrintUrl(URL.createObjectURL(await makeSheet('jpeg')));
     } catch (e) {
       setBanner(`Could not make the sheet on this device (${e instanceof Error ? e.message : 'unknown error'}). Try fewer photos on the sheet, or use a computer.`);
     } finally {
@@ -584,26 +585,46 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
             </Panel>
 
             <Panel>
-              <div className="flex items-center justify-between gap-3">
+              <div className="space-y-3">
                 <div>
-                  <p className="text-label-lg text-navy">Output · {Math.round(layout.pxW * (maxQuality ? HQ_SCALE : 1))} × {Math.round(layout.pxH * (maxQuality ? HQ_SCALE : 1))} px</p>
-                  <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · {maxQuality ? '600' : '300'} DPI PNG</p>
-                  <label className="mt-1 flex cursor-pointer items-center gap-2 text-body-sm text-secondary">
-                    <input type="checkbox" checked={maxQuality} onChange={(e) => setMaxQuality(e.target.checked)} className="h-4 w-4 accent-[#ff5e00]" />
-                    Maximum quality (600 DPI, about 22 MB, needs a computer)
-                  </label>
+                  <p className="text-label-lg text-navy">
+                    Output · {Math.round(layout.pxW * (maxQuality ? HQ_SCALE : 1))} × {Math.round(layout.pxH * (maxQuality ? HQ_SCALE : 1))} px
+                  </p>
+                  <p className="text-body-md text-secondary">
+                    {layout.pageW}×{layout.pageH} mm · {maxQuality ? '600' : '300'} DPI {format === 'pdf' ? 'PDF' : 'JPEG'}
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={print} disabled={placed === 0 || busy} className="flex h-10 items-center gap-2 rounded-lg bg-surface-container px-4 text-label-lg text-navy hover:bg-surface-container-high disabled:opacity-40">
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="File type">
+                  {(['jpeg', 'pdf'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      aria-pressed={format === f}
+                      onClick={() => setFormat(f)}
+                      className={`h-9 rounded-lg text-label-lg transition ${format === f ? 'bg-primary-container text-white shadow' : 'bg-surface-container text-navy hover:bg-surface-container-high'}`}
+                    >
+                      {f === 'jpeg' ? 'JPEG' : 'PDF'}
+                    </button>
+                  ))}
+                </div>
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-surface-container px-3 py-2.5">
+                  <input type="checkbox" checked={maxQuality} onChange={(e) => setMaxQuality(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#ff5e00]" />
+                  <span className="text-body-md text-navy">
+                    Maximum quality · 600 DPI
+                    <span className="block text-body-sm text-secondary">Bigger file (about 22 MB), needs a computer</span>
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={print} disabled={placed === 0 || busy} className="flex h-11 items-center justify-center gap-2 rounded-lg bg-surface-container px-4 text-label-lg text-navy hover:bg-surface-container-high disabled:opacity-40">
                     {job === 'print' ? <Spinner /> : <Icon name="print" className="!text-[18px]" />} {job === 'print' ? 'Preparing…' : 'Print'}
                   </button>
                   <button
                     onClick={download}
                     disabled={placed === 0 || busy}
-                    className={`flex h-10 items-center gap-2 rounded-lg px-4 text-label-lg text-white transition disabled:opacity-60 ${justDone ? 'bg-[#1e8e4e]' : 'bg-navy hover:bg-[#16305c]'}`}
+                    className={`flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-label-lg text-white transition disabled:opacity-60 ${justDone ? 'bg-[#1e8e4e]' : 'bg-navy hover:bg-[#16305c]'}`}
                   >
                     {job === 'download' ? <Spinner /> : <Icon name={justDone ? 'check_circle' : 'download'} className="!text-[18px]" />}
-                    {job === 'download' ? 'Preparing…' : justDone ? 'Downloaded' : 'PNG'}
+                    {job === 'download' ? 'Preparing…' : justDone ? 'Downloaded' : format === 'pdf' ? 'PDF' : 'JPEG'}
                   </button>
                 </div>
               </div>

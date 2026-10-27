@@ -408,17 +408,68 @@ async function withDpi(blob: Blob, dpi: number): Promise<Blob> {
   return new Blob([src.slice(0, afterIhdr), chunk, src.slice(afterIhdr)], { type: 'image/png' });
 }
 
+/** A JPEG from the canvas has a JFIF header with no unit; this sets the unit to dots per inch and writes the dpi in. */
+async function jpegWithDpi(blob: Blob, dpi: number): Promise<Blob> {
+  const src = new Uint8Array(await blob.arrayBuffer());
+  const jfif = src.length > 18 && src[2] === 0xff && src[3] === 0xe0 && String.fromCharCode(...src.slice(6, 10)) === 'JFIF';
+  if (!jfif) return blob;
+  src[13] = 1; // unit: dots per inch
+  src[14] = src[16] = dpi >> 8;
+  src[15] = src[17] = dpi & 0xff;
+  return new Blob([src], { type: 'image/jpeg' });
+}
+
+export type SheetFormat = 'png' | 'jpeg' | 'pdf';
+
+/** A one page PDF, as big as the paper, with the JPEG as it is (no second compression) filling the page. No library needed. */
+async function pdfFromJpeg(jpeg: Blob, pxW: number, pxH: number, pageWmm: number, pageHmm: number): Promise<Blob> {
+  const pt = (mm: number) => ((mm * 72) / 25.4).toFixed(2);
+  const enc = new TextEncoder();
+  const data = new Uint8Array(await jpeg.arrayBuffer());
+  const parts: Uint8Array[] = [];
+  const offsets: number[] = [];
+  let size = 0;
+  const push = (b: Uint8Array | string) => {
+    const u = typeof b === 'string' ? enc.encode(b) : b;
+    parts.push(u);
+    size += u.length;
+  };
+  const obj = (n: number, body: string) => {
+    offsets[n] = size;
+    push(`${n} 0 obj\n${body}\nendobj\n`);
+  };
+  push('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt(pageWmm)} ${pt(pageHmm)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  offsets[4] = size;
+  push(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pxW} /Height ${pxH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length} >>\nstream\n`);
+  push(data);
+  push('\nendstream\nendobj\n');
+  const content = `q ${pt(pageWmm)} 0 0 ${pt(pageHmm)} 0 0 cm /Im0 Do Q`;
+  obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const xref = size;
+  let x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) x += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  push(x + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts as BlobPart[], { type: 'application/pdf' });
+}
+
 /**
  * Print-ready PNG at 300 DPI, with the 300 dpi written into the file. `scale` below 1 makes a smaller sheet (and says so in
  * the dpi), for phones that cannot hold a full size canvas in memory.
  */
-export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[], scale = 1): Promise<Blob> {
+export async function exportPng(layout: SheetLayout, clip: ClipKind, slots: (Photo | null)[], scale = 1, format: SheetFormat = 'png'): Promise<Blob> {
   await ensureLabelFonts(slots.map((p) => p?.label)); // labels should be drawn in their real fonts, not a fallback
   await preloadFrames(slots.map((p) => p?.label?.frame)); // and overlay designs must be in
   const c = canvasOf(Math.round(layout.pxW * scale), Math.round(layout.pxH * scale));
   try {
     drawSheet(c, layout, clip, slots, PX_PER_MM * scale);
-    return await withDpi(await toBlob(c, 'image/png'), Math.round(DPI * scale));
+    const dpi = Math.round(DPI * scale);
+    // JPEG at 98: no visible loss, and a file about a fifth of the size of the PNG
+    if (format === 'png') return await withDpi(await toBlob(c, 'image/png'), dpi);
+    const jpeg = await jpegWithDpi(await toBlob(c, 'image/jpeg', 0.98), dpi);
+    return format === 'pdf' ? await pdfFromJpeg(jpeg, c.width, c.height, layout.pageW, layout.pageH) : jpeg;
   } finally {
     c.width = c.height = 0;
     releaseExactCopies();
