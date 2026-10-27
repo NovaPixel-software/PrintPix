@@ -12,8 +12,8 @@ import type { NameLabel, Photo, SlotData } from '@/lib/types';
 import LabelPanel from './LabelPanel';
 
 const CANVAS_PX_PER_MM = 4.5;
-/** The high quality export: 500 DPI, about 15 MB for an A4 sheet. */
-const HQ_SCALE = 500 / 300;
+/** The high quality export: 600 DPI, about 22 MB for an A4 sheet. */
+const HQ_SCALE = 2;
 const norm = (d: number) => {
   const r = ((((d + 180) % 360) + 360) % 360) - 180;
   return r === -180 ? 180 : r;
@@ -35,7 +35,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const [photos, setPhotos] = useState<(Photo | null)[]>(() => Array(layout.count).fill(null));
   const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [maxQuality, setMaxQuality] = useState(false); // 500 DPI instead of 300
+  const [maxQuality, setMaxQuality] = useState(true); // 600 DPI by default, untick for 300
   const [banner, setBanner] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -587,10 +587,10 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-label-lg text-navy">Output · {Math.round(layout.pxW * (maxQuality ? HQ_SCALE : 1))} × {Math.round(layout.pxH * (maxQuality ? HQ_SCALE : 1))} px</p>
-                  <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · {maxQuality ? '500' : '300'} DPI PNG</p>
+                  <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · {maxQuality ? '600' : '300'} DPI PNG</p>
                   <label className="mt-1 flex cursor-pointer items-center gap-2 text-body-sm text-secondary">
                     <input type="checkbox" checked={maxQuality} onChange={(e) => setMaxQuality(e.target.checked)} className="h-4 w-4 accent-[#ff5e00]" />
-                    High quality (500 DPI, about 15 MB, needs a computer)
+                    Maximum quality (600 DPI, about 22 MB, needs a computer)
                   </label>
                 </div>
                 <div className="flex gap-2">
