@@ -26,6 +26,8 @@ export interface SheetLayout {
   slots: Rect[];
   /** The outer cut outline of each piece, in the same order. Null when the template has no separate cut size. */
   cuts: Rect[] | null;
+  /** True when not even a faint outline is drawn around the photos. */
+  plain?: boolean;
   slotW: number; // photo area
   slotH: number;
   pxW: number; // pixels at 300 DPI
@@ -36,7 +38,7 @@ export function pageSize(paper: Paper, orientation: Orientation) {
   return orientation === 'portrait' ? { w: paper.wmm, h: paper.hmm } : { w: paper.hmm, h: paper.wmm };
 }
 
-type Spec = Pick<Template, 'wmm' | 'hmm'> & Partial<Pick<Template, 'cutW' | 'cutH' | 'gapXmm' | 'gapYmm' | 'topMm' | 'marginMm'>>;
+type Spec = Pick<Template, 'wmm' | 'hmm'> & Partial<Pick<Template, 'cutW' | 'cutH' | 'gapXmm' | 'gapYmm' | 'topMm' | 'marginMm' | 'plain'>>;
 
 export function computeLayout(paper: Paper, orientation: Orientation, template: Spec): SheetLayout {
   const { w: pageW, h: pageH } = pageSize(paper, orientation);
@@ -73,6 +75,7 @@ export function computeLayout(paper: Paper, orientation: Orientation, template: 
     count: cols * rows,
     slots,
     cuts: template.cutW && template.cutH ? cuts : null,
+    plain: template.plain,
     slotW: template.wmm,
     slotH: template.hmm,
     pxW: Math.round(pageW * PX_PER_MM),

@@ -36,6 +36,8 @@ export interface Template {
   gapYmm?: number;
   topMm?: number;
   marginMm?: number;
+  /** No cut outline of any kind, not even the faint alignment line: the pieces are cut by hand or by machine from the photos alone. */
+  plain?: boolean;
 }
 
 export interface Paper {
@@ -107,8 +109,20 @@ function cutTemplate(id: string, shapeId: string, photoW: number, photoH: number
   };
 }
 
-/** A magnet rectangle: same sizes and ids as before, now with a cut outline around it. */
-const magnetRect = (shapeId: string, w: number, h: number) => cutTemplate(`magnet-${shapeId}-${w}x${h}`, shapeId, w, h, RING_SQUARE_MM, SPACE_SQUARE);
+/** A magnet rectangle: no cut outline, just the photos with the same gaps as between the cut outlines of the Square sheet. */
+const magnetRect = (shapeId: string, w: number, h: number): Template => ({
+  id: `magnet-${shapeId}-${w}x${h}`,
+  productId: 'magnet',
+  shapeId,
+  wmm: w,
+  hmm: h,
+  gapXmm: SPACE_SQUARE.gapX,
+  gapYmm: SPACE_SQUARE.gapY,
+  topMm: SPACE_SQUARE.top,
+  marginMm: SPACE_SQUARE.margin,
+  plain: true,
+  label: dim(w, h),
+});
 
 /** Events saved before these templates existed point at the old ids, which now map to the new ones. */
 const LEGACY_TEMPLATE_IDS: Record<string, string> = {
@@ -128,7 +142,9 @@ export const TEMPLATES: Template[] = [
   cutTemplate('magnet-square-50x50', 'square', 50, 50, RING_SQUARE_MM, SPACE_SQUARE),
   magnetRect('rect-landscape', 80, 53),
   magnetRect('rect-landscape', 89, 51),
+  magnetRect('rect-landscape', 88.9, 63.5), // 3.5 x 2.5 inch
   magnetRect('rect-portrait', 53, 80),
+  magnetRect('rect-portrait', 63.5, 88.9), // 2.5 x 3.5 inch
   cutTemplate('magnet-round-37x37', 'round', 37, 37, RING_ROUND_MM, SPACE_ROUND),
   t('magnet', 'oval', 76, 51),
   t('magnet', 'rounded', 80, 53),

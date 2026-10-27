@@ -98,7 +98,7 @@ function path(ctx: CanvasRenderingContext2D, s: Rect, clip: ClipKind) {
  * detail turns into grain and moire. Averaging everything removes that, like a good photo editor does.
  * Done in two passes, across and then down. Transparent pixels do not darken the colours.
  */
-function areaDownscale(src: ImageBitmap | HTMLCanvasElement, dw: number, dh: number): HTMLCanvasElement {
+function areaDownscale(src: ImageBitmap | HTMLCanvasElement, dw: number, dh: number, sharpen = false): HTMLCanvasElement {
   const sw = src.width;
   const sh = src.height;
   const c0 = canvasOf(sw, sh);
@@ -161,8 +161,30 @@ function areaDownscale(src: ImageBitmap | HTMLCanvasElement, dw: number, dh: num
     }
   }
   const res = canvasOf(dw, dh);
-  res.getContext('2d')!.putImageData(new ImageData(out, dw, dh), 0, 0);
+  res.getContext('2d')!.putImageData(new ImageData(sharpen ? sharpened(out, dw, dh, 0.55) : out, dw, dh), 0, 0);
   return res;
+}
+
+/**
+ * Light unsharp mask (the photo is already averaged, so it comes out a little soft, like Photoshop's plain bicubic).
+ * `amount` is how much of the difference to the 3x3 blur is added back. Alpha is left alone.
+ */
+function sharpened(src: Uint8ClampedArray<ArrayBuffer>, w: number, h: number, amount: number): Uint8ClampedArray<ArrayBuffer> {
+  const out = new Uint8ClampedArray(src);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const o = (y * w + x) * 4;
+      if (src[o + 3] < 255) continue; // the edge of a transparent area stays as it is
+      for (let c = 0; c < 3; c++) {
+        const blur =
+          (src[o + c - 4] + src[o + c + 4] + src[o + c - w * 4] + src[o + c + w * 4]) * 0.125 +
+          (src[o + c - w * 4 - 4] + src[o + c - w * 4 + 4] + src[o + c + w * 4 - 4] + src[o + c + w * 4 + 4]) * 0.0625 +
+          src[o + c] * 0.25;
+        out[o + c] = src[o + c] + (src[o + c] - blur) * amount;
+      }
+    }
+  }
+  return out;
 }
 
 /** Exactly averaged copies for the printed sheet, kept so print and download after each other do not repeat the work. */
@@ -182,7 +204,7 @@ function exactCopy(bmp: ImageBitmap, deviceScale: number): HTMLCanvasElement {
   if (!byWidth) exactCache.set(bmp, (byWidth = new Map()));
   let hit = byWidth.get(dw);
   if (!hit) {
-    hit = areaDownscale(bmp, dw, Math.max(1, Math.round(bmp.height * deviceScale)));
+    hit = areaDownscale(bmp, dw, Math.max(1, Math.round(bmp.height * deviceScale)), true);
     exactCanvases.push(hit);
     byWidth.set(dw, hit);
   }
@@ -309,7 +331,7 @@ export function drawSheet(
       ctx.font = `500 ${u * 0.3}px Inter, system-ui, sans-serif`;
       ctx.fillStyle = '#009dd9';
       ctx.fillText('+', s.x + s.w / 2, s.y + s.h / 2 - u * 0.1);
-    } else if (!layout.cuts) {
+    } else if (!layout.cuts && !layout.plain) {
       // faint cut outline for alignment
       path(ctx, s, clip);
       ctx.lineWidth = 0.25;
@@ -414,9 +436,7 @@ const MAX_SIDE = 2400;
  */
 export async function importPhoto(file: File): Promise<Photo> {
   const full = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  // phones keep every photo in memory, so they get smaller copies: 1800 px is still more than a 60 mm print needs even at 2x zoom
-  const maxSide = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 1800 : MAX_SIDE;
-  const k = Math.min(1, maxSide / Math.max(full.width, full.height));
+  const k = Math.min(1, MAX_SIDE / Math.max(full.width, full.height));
   let bmp = full;
   if (k < 1) {
     bmp = await createImageBitmap(areaDownscale(full, Math.round(full.width * k), Math.round(full.height * k)));

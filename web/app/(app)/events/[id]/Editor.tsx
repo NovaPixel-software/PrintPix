@@ -12,6 +12,8 @@ import type { NameLabel, Photo, SlotData } from '@/lib/types';
 import LabelPanel from './LabelPanel';
 
 const CANVAS_PX_PER_MM = 4.5;
+/** The high quality export: 500 DPI, about 15 MB for an A4 sheet. */
+const HQ_SCALE = 500 / 300;
 const norm = (d: number) => {
   const r = ((((d + 180) % 360) + 360) % 360) - 180;
   return r === -180 ? 180 : r;
@@ -33,6 +35,7 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
   const [photos, setPhotos] = useState<(Photo | null)[]>(() => Array(layout.count).fill(null));
   const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [maxQuality, setMaxQuality] = useState(false); // 500 DPI instead of 300
   const [banner, setBanner] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -279,18 +282,15 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
     }
   };
 
-  /** The sheet, full size if the device can manage it, and smaller if it runs out of memory (phones). */
+  /** The sheet, always at the full 300 DPI. It is never made smaller to fit: a lower quality print is worse than an error. */
   const makeSheet = async () => {
-    let last: unknown = null;
-    for (const scale of [1, 0.67, 0.5]) {
-      try {
-        return await exportPng(layout, shape.clip, photos, scale);
-      } catch (e) {
-        last = e; // try a smaller canvas
-        console.error('Sheet export failed at scale', scale, e);
-      }
+    try {
+      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1);
+    } catch (e) {
+      console.error('Sheet export failed, trying once more', e);
+      await new Promise((r) => setTimeout(r, 300)); // let the browser free the memory of the first try
+      return await exportPng(layout, shape.clip, photos, maxQuality ? HQ_SCALE : 1);
     }
-    throw last instanceof Error ? last : new Error('export failed');
   };
 
   // On a phone the sheet takes a few seconds to make, and by then the browser no longer counts the tap as a click, so it blocks
@@ -586,8 +586,12 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
             <Panel>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-label-lg text-navy">Output · {layout.pxW} × {layout.pxH} px</p>
-                  <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · 300 DPI PNG</p>
+                  <p className="text-label-lg text-navy">Output · {Math.round(layout.pxW * (maxQuality ? HQ_SCALE : 1))} × {Math.round(layout.pxH * (maxQuality ? HQ_SCALE : 1))} px</p>
+                  <p className="text-body-md text-secondary">{layout.pageW}×{layout.pageH} mm · {maxQuality ? '500' : '300'} DPI PNG</p>
+                  <label className="mt-1 flex cursor-pointer items-center gap-2 text-body-sm text-secondary">
+                    <input type="checkbox" checked={maxQuality} onChange={(e) => setMaxQuality(e.target.checked)} className="h-4 w-4 accent-[#ff5e00]" />
+                    High quality (500 DPI, about 15 MB, needs a computer)
+                  </label>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={print} disabled={placed === 0 || busy} className="flex h-10 items-center gap-2 rounded-lg bg-surface-container px-4 text-label-lg text-navy hover:bg-surface-container-high disabled:opacity-40">
@@ -611,7 +615,11 @@ export default function Editor({ event, onEvent }: { event: ConfiguredEvent; onE
       {printUrl &&
         createPortal(
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={printUrl} alt="" />,
+          <>
+            {/* the paper size is fixed, so the browser prints the 300 dpi sheet 1:1 instead of fitting it to whatever paper is set */}
+            <style>{`@media print { @page { size: ${layout.pageW}mm ${layout.pageH}mm; margin: 0; } #print-root img { width: ${layout.pageW}mm; height: ${layout.pageH}mm; } }`}</style>
+            <img src={printUrl} alt="" />
+          </>,
           document.getElementById('print-root')!,
         )}
 
